@@ -187,7 +187,7 @@ class Tetromino(Group):
         global tilegrid
         for y in range(TETROMINO_SIZE):
             for x in range(TETROMINO_SIZE):
-                if self._tilegrid[x, y]:
+                if self._tilegrid[x, y] and 0 <= x + self.tile_x < GRID_WIDTH and 0 <= y + self.tile_y < GRID_WIDTH:
                     tilegrid[x + self.tile_x, y + self.tile_y] = self._tilegrid[x, y]
 
     def rotate(self) -> bool:
