@@ -15,19 +15,6 @@ import adafruit_imageload
 request_display_config(320, 240)
 display = supervisor.runtime.display
 
-# initialize groups to hold visual elements
-main_group = Group()
-display.root_group = main_group
-
-# add background to the main group
-background = Bitmap(display.width, display.height, 1)
-bg_color = Palette(1)
-bg_color[0] = 0x030060
-main_group.append(TileGrid(
-    background,
-    pixel_shader=bg_color
-))
-
 TILE_SIZE = 8
 SCREEN_WIDTH = display.width // TILE_SIZE
 SCREEN_HEIGHT = display.height // TILE_SIZE
@@ -103,7 +90,31 @@ TETROMINOS = [
     }
 ]
 
-tiles, tiles_palette = adafruit_imageload.load("bitmaps/tiles.bmp")
+# initialize groups to hold visual elements
+main_group = Group()
+display.root_group = main_group
+
+# load background tiles
+bg_tiles, bg_palette = adafruit_imageload.load("bitmaps/bg.bmp")
+
+# setup background color palette
+bg_palette[0] = 0x030060
+bg_palette[1] = 0x442a92
+
+# use terminalio font as tile sheet to write to background
+bg_grid = TileGrid(
+    bg_tiles, pixel_shader=bg_palette,
+    width=SCREEN_WIDTH, height=SCREEN_HEIGHT,
+    tile_width=TILE_SIZE, tile_height=TILE_SIZE,
+)
+
+# randomly generate background with "/" and "\" to create a maze
+for y in range(SCREEN_HEIGHT):
+    for x in range(SCREEN_WIDTH):
+        bg_grid[x, y] = randint(0, (bg_tiles.width // TILE_SIZE) - 1)
+
+# add background to display
+main_group.append(bg_grid)
 tiles_palette.make_transparent(27)
 
 tilegrid = TileGrid(
