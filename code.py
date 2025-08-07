@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPLv3
 import asyncio
 import board
-from displayio import Group, TileGrid
+from displayio import Group, TileGrid, OnDiskBitmap
 from keypad import Keys
 from random import randint
 import supervisor
@@ -115,6 +115,16 @@ for y in range(SCREEN_HEIGHT):
 
 # add background to display
 main_group.append(bg_grid)
+
+# display title image
+title_bmp = OnDiskBitmap("bitmaps/title.bmp")
+title_bmp.pixel_shader.make_transparent(8)
+title_tg = TileGrid(
+    title_bmp, pixel_shader=title_bmp.pixel_shader,
+    x=(display.width - title_bmp.width) // 2,
+    y=((SCREEN_HEIGHT - GRID_HEIGHT) // 2 * TILE_SIZE - title_bmp.height) // 2,
+)
+main_group.append(title_tg)
 
 # load tetromino tiles
 tiles, tiles_palette = adafruit_imageload.load("bitmaps/tetromino.bmp")
