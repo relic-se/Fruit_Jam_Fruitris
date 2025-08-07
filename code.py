@@ -145,6 +145,7 @@ grid_bg_tg = TileGrid(
     grid_bg_tiles, pixel_shader=grid_bg_palette,
     width=GRID_WIDTH + 2, height=GRID_HEIGHT + 2,
     tile_width=TILE_SIZE, tile_height=TILE_SIZE,
+    x=-TILE_SIZE, y=-TILE_SIZE,
     default_tile=4,  # center tile
 )
 grid_group.append(grid_bg_tg)
