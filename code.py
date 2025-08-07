@@ -339,9 +339,7 @@ def update_tetromino() -> None:
         index = randint(0, len(TETROMINOS) - 1)
         tetromino = Tetromino(TETROMINOS[index]["pattern"], TETROMINOS[index]["tile"])
         grid_group.append(tetromino)
-
-    # place if collided
-    if tetromino.check_collide(y=1):
+    elif tetromino.check_collide(y=1):  # place if collided
         tetromino.place()
         grid_group.remove(tetromino)
 
@@ -374,8 +372,7 @@ def update_tetromino() -> None:
         # reset old tetromino
         del tetromino
         tetromino = None
-    else:
-        # move tetromino down
+    else:  # move tetromino down
         tetromino.tile_y += 1
 
 async def tetromino_handler() -> None:
