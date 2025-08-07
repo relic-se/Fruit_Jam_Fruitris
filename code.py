@@ -3,14 +3,12 @@
 # SPDX-License-Identifier: GPLv3
 import asyncio
 import board
-from displayio import Group, TileGrid, Bitmap, Palette
+from displayio import Group, TileGrid
 from keypad import Keys
 from random import randint
 import supervisor
 import sys
-import terminalio
 
-from adafruit_display_text.bitmap_label import Label
 from adafruit_fruitjam.peripherals import request_display_config
 import adafruit_imageload
 
