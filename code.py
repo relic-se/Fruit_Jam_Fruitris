@@ -18,8 +18,8 @@ display = supervisor.runtime.display
 TILE_SIZE = 8
 SCREEN_WIDTH = display.width // TILE_SIZE
 SCREEN_HEIGHT = display.height // TILE_SIZE
-GRID_WIDTH = 40
-GRID_HEIGHT = 30
+GRID_WIDTH = 10
+GRID_HEIGHT = 16
 TETROMINO_SIZE = 4
 GAME_SPEED_START = 1
 GAME_SPEED_MOD = 0.98  # modifies the game speed when line is cleared
@@ -115,22 +115,63 @@ for y in range(SCREEN_HEIGHT):
 
 # add background to display
 main_group.append(bg_grid)
+
+# load tetromino tiles
+tiles, tiles_palette = adafruit_imageload.load("bitmaps/tetromino.bmp")
 tiles_palette.make_transparent(27)
 
+# setup grid container
+grid_group = Group(
+    x=((SCREEN_WIDTH - GRID_WIDTH) // 2) * TILE_SIZE,
+    y=((SCREEN_HEIGHT - GRID_HEIGHT) // 2) * TILE_SIZE
+)
+main_group.append(grid_group)
+
+# load grid border tiles, setup palette and tilegrid
+grid_bg_tiles, grid_bg_palette = adafruit_imageload.load("bitmaps/grid.bmp")
+grid_bg_palette[0] = 0x000000
+grid_bg_palette[1] = 0x5fcde4
+grid_bg_tg = TileGrid(
+    grid_bg_tiles, pixel_shader=grid_bg_palette,
+    width=GRID_WIDTH + 2, height=GRID_HEIGHT + 2,
+    tile_width=TILE_SIZE, tile_height=TILE_SIZE,
+    default_tile=4,  # center tile
+)
+grid_group.append(grid_bg_tg)
+
+# set corner tiles
+grid_bg_tg[0, 0] = 0
+grid_bg_tg[GRID_WIDTH + 1, 0] = 2
+grid_bg_tg[0, GRID_HEIGHT + 1] = 6
+grid_bg_tg[GRID_WIDTH + 1, GRID_HEIGHT + 1] = 8
+
+# set edge tiles
+for x in range(1, GRID_WIDTH + 1):
+    grid_bg_tg[x, 0] = 1
+    grid_bg_tg[x, GRID_HEIGHT + 1] = 7
+for y in range(1, GRID_HEIGHT + 1):
+    grid_bg_tg[0, y] = 3
+    grid_bg_tg[GRID_WIDTH + 1, y] = 5
+
+# setup grid
 tilegrid = TileGrid(
     tiles, pixel_shader=tiles_palette,
     width=GRID_WIDTH, height=GRID_HEIGHT,
     tile_width=TILE_SIZE, tile_height=TILE_SIZE,
 )
-main_group.append(tilegrid)
+grid_group.append(tilegrid)
 
 class Tetromino(Group):
 
     def __init__(self, pattern:list, tile:int=1):
         super().__init__()
         self.tile_x = (GRID_WIDTH - TETROMINO_SIZE) // 2
-        if tile == 3:  # square
-            self.tile_y = -1
+
+        # move tetromino to top of grid depending on pattern
+        for y in range(TETROMINO_SIZE):
+            if sum(pattern[y]):
+                self.tile_y = -y
+                break
         
         self._tile = tile
 
@@ -196,8 +237,9 @@ class Tetromino(Group):
         global tilegrid
         for y in range(TETROMINO_SIZE):
             for x in range(TETROMINO_SIZE):
-                if self._tilegrid[x, y] and 0 <= x + self.tile_x < GRID_WIDTH and 0 <= y + self.tile_y < GRID_WIDTH:
-                    tilegrid[x + self.tile_x, y + self.tile_y] = self._tilegrid[x, y]
+                grid_x, grid_y = x + self.tile_x, y + self.tile_y
+                if self._tilegrid[x, y] and 0 <= grid_x < GRID_WIDTH and 0 <= grid_y < GRID_HEIGHT:
+                    tilegrid[grid_x, grid_y] = self._tilegrid[x, y]
 
     def rotate(self) -> bool:
         return self.rotate_right()
@@ -285,12 +327,12 @@ def update_tetromino() -> None:
     if tetromino is None:
         index = randint(0, len(TETROMINOS) - 1)
         tetromino = Tetromino(TETROMINOS[index]["pattern"], TETROMINOS[index]["tile"])
-        main_group.append(tetromino)
+        grid_group.append(tetromino)
 
     # place if collided
     if tetromino.check_collide(y=1):
         tetromino.place()
-        main_group.remove(tetromino)
+        grid_group.remove(tetromino)
 
         # check for line clearing
         did_clear = False
