@@ -3,12 +3,14 @@
 # SPDX-License-Identifier: GPLv3
 import asyncio
 import board
-from displayio import Group, TileGrid, OnDiskBitmap
+from displayio import Group, TileGrid, OnDiskBitmap, Palette
 from keypad import Keys
 from random import randint
 import supervisor
 import sys
+import terminalio
 
+from adafruit_display_text.label import Label
 from adafruit_fruitjam.peripherals import request_display_config
 import adafruit_imageload
 
@@ -19,10 +21,15 @@ TILE_SIZE = 8
 SCREEN_WIDTH = display.width // TILE_SIZE
 SCREEN_HEIGHT = display.height // TILE_SIZE
 GRID_WIDTH = 10
-GRID_HEIGHT = 16
+GRID_HEIGHT = 20
 TETROMINO_SIZE = 4
 GAME_SPEED_START = 1
 GAME_SPEED_MOD = 0.98  # modifies the game speed when line is cleared
+WINDOW_OFFSET_Y = 1
+WINDOW_GAP = 2
+WINDOW_WIDTH = (SCREEN_WIDTH - GRID_WIDTH - 2) // 2 - WINDOW_GAP * 2
+WINDOW_HEIGHT = (GRID_HEIGHT + 2 - WINDOW_GAP * 2) // 3
+FONT_HEIGHT = terminalio.FONT.get_bounding_box()[1]
 
 TETROMINOS = [
     {
@@ -90,110 +97,20 @@ TETROMINOS = [
     }
 ]
 
-# initialize groups to hold visual elements
-main_group = Group()
-display.root_group = main_group
+def copy_palette(palette:Palette) -> Palette:
+    clone = Palette(len(palette))
+    for i, color in enumerate(palette):
+        # Add color to new_palette
+        clone[i] = color
+        # Set new_palette color index transparency
+        if palette.is_transparent(i):
+            clone.make_transparent(i)
+    return clone
 
-# load background tiles
-bg_tiles, bg_palette = adafruit_imageload.load("bitmaps/bg.bmp")
+# load window border tiles
+window_tiles, window_palette = adafruit_imageload.load("bitmaps/window.bmp")
 
-# setup background color palette
-bg_palette[0] = 0x030060
-bg_palette[1] = 0x442a92
-
-# use terminalio font as tile sheet to write to background
-bg_grid = TileGrid(
-    bg_tiles, pixel_shader=bg_palette,
-    width=SCREEN_WIDTH, height=SCREEN_HEIGHT,
-    tile_width=TILE_SIZE, tile_height=TILE_SIZE,
-)
-
-# randomly generate background with "/" and "\" to create a maze
-for y in range(SCREEN_HEIGHT):
-    for x in range(SCREEN_WIDTH):
-        bg_grid[x, y] = randint(0, (bg_tiles.width // TILE_SIZE) - 1)
-
-# add background to display
-main_group.append(bg_grid)
-
-# display title image
-title_bmp = OnDiskBitmap("bitmaps/title.bmp")
-title_bmp.pixel_shader.make_transparent(8)
-title_tg = TileGrid(
-    title_bmp, pixel_shader=title_bmp.pixel_shader,
-    x=(display.width - title_bmp.width) // 2,
-    y=((SCREEN_HEIGHT - GRID_HEIGHT) // 2 * TILE_SIZE - title_bmp.height) // 2,
-)
-main_group.append(title_tg)
-
-# load tetromino tiles
-tiles, tiles_palette = adafruit_imageload.load("bitmaps/tetromino.bmp")
-tiles_palette.make_transparent(27)
-
-# setup grid container
-grid_group = Group(
-    x=((SCREEN_WIDTH - GRID_WIDTH) // 2) * TILE_SIZE,
-    y=((SCREEN_HEIGHT - GRID_HEIGHT) // 2) * TILE_SIZE
-)
-main_group.append(grid_group)
-
-# load grid border tiles, setup palette and tilegrid
-grid_bg_tiles, grid_bg_palette = adafruit_imageload.load("bitmaps/grid.bmp")
-grid_bg_palette[0] = 0x000000
-grid_bg_palette[1] = 0x5fcde4
-grid_bg_tg = TileGrid(
-    grid_bg_tiles, pixel_shader=grid_bg_palette,
-    width=GRID_WIDTH + 2, height=GRID_HEIGHT + 2,
-    tile_width=TILE_SIZE, tile_height=TILE_SIZE,
-    x=-TILE_SIZE, y=-TILE_SIZE,
-    default_tile=4,  # center tile
-)
-grid_group.append(grid_bg_tg)
-
-# set corner tiles
-grid_bg_tg[0, 0] = 0
-grid_bg_tg[GRID_WIDTH + 1, 0] = 2
-grid_bg_tg[0, GRID_HEIGHT + 1] = 6
-grid_bg_tg[GRID_WIDTH + 1, GRID_HEIGHT + 1] = 8
-
-# set edge tiles
-for x in range(1, GRID_WIDTH + 1):
-    grid_bg_tg[x, 0] = 1
-    grid_bg_tg[x, GRID_HEIGHT + 1] = 7
-for y in range(1, GRID_HEIGHT + 1):
-    grid_bg_tg[0, y] = 3
-    grid_bg_tg[GRID_WIDTH + 1, y] = 5
-
-# setup grid
-tilegrid = TileGrid(
-    tiles, pixel_shader=tiles_palette,
-    width=GRID_WIDTH, height=GRID_HEIGHT,
-    tile_width=TILE_SIZE, tile_height=TILE_SIZE,
-)
-grid_group.append(tilegrid)
-
-class Tetromino(Group):
-
-    def __init__(self, pattern:list, tile:int=1):
-        super().__init__()
-        self.tile_x = (GRID_WIDTH - TETROMINO_SIZE) // 2
-
-        # move tetromino to top of grid depending on pattern
-        for y in range(TETROMINO_SIZE):
-            if sum(pattern[y]):
-                self.tile_y = -y
-                break
-        
-        self._tile = tile
-
-        self._tilegrid = TileGrid(
-            tiles, pixel_shader=tiles_palette,
-            width=TETROMINO_SIZE, height=TETROMINO_SIZE,
-            tile_width=TILE_SIZE, tile_height=TILE_SIZE,
-        )
-        self.grid = pattern
-
-        self.append(self._tilegrid)
+class TileGroup(Group):
 
     @property
     def tile_x(self) -> int:
@@ -210,6 +127,137 @@ class Tetromino(Group):
     @tile_y.setter
     def tile_y(self, value:int) -> None:
         self.y = value * TILE_SIZE
+    
+class Window(TileGroup):
+
+    def __init__(self, title:str="", width:int=WINDOW_WIDTH, height:int=WINDOW_HEIGHT, x:int=0, y:int=0, background_color=0x000000, border_color=0xffffff, title_color=0xffffff):
+        global window_tiles, window_palette
+        super().__init__(
+            x=x * TILE_SIZE,
+            y=y * TILE_SIZE,
+        )
+
+        if width < 3 or height < 3:
+            raise ValueError("width/height must be at least 3 tiles")
+        
+        palette = copy_palette(window_palette)
+        # TODO: apply background_color and border_color
+
+        # load grid border tiles, setup palette and tilegrid
+        self._tg = TileGrid(
+            window_tiles, pixel_shader=palette,
+            width=width, height=height,
+            tile_width=TILE_SIZE, tile_height=TILE_SIZE,
+            default_tile=4,  # center tile
+        )
+        self._update_tiles()
+        self.append(self._tg)
+
+        if len(title):
+            self._title = Label(terminalio.FONT,
+                                text=title, color=title_color,
+                                x=TILE_SIZE, y=TILE_SIZE,
+                                anchor_point=(0,0))
+            self.append(self._title)
+    
+    def _update_tiles(self) -> None:
+        # set corner tiles
+        self._tg[0, 0] = 0
+        self._tg[self._tg.width - 1, 0] = 2
+        self._tg[0, self._tg.height - 1] = 6
+        self._tg[self._tg.width - 1, self._tg.height - 1] = 8
+
+        # set edge tiles
+        for i in range(1, self._tg.width - 1):
+            self._tg[i, 0] = 1
+            self._tg[i, self._tg.height - 1] = 7
+        for i in range(1, self._tg.height - 1):
+            self._tg[0, i] = 3
+            self._tg[self._tg.width - 1, i] = 5
+
+    @property
+    def tile_width(self) -> int:
+        return self._tg.width
+    
+    @tile_width.setter
+    def tile_width(self, value:int) -> None:
+        self._tg.width = value
+        self._update_tiles()
+    
+    @property
+    def tile_height(self) -> int:
+        return self._tg.height
+    
+    @tile_height.setter
+    def tile_height(self, value:int) -> None:
+        self._tg.height = value
+        self._update_tiles()
+
+    @property
+    def width(self) -> int:
+        return self._tg.width * TILE_SIZE
+    
+    @property
+    def height(self) -> int:
+        return self._tg.height * TILE_SIZE
+    
+class ScoreWindow(Window):
+    
+    def __init__(self, title:str="Score", x:int=0, y:int=0):
+        super().__init__(title=title, x=x, y=y)
+
+        self._score = Label(terminalio.FONT,
+                            text="0", color=0xffffff,
+                            x=self.width // 2,
+                            y=self.height // 2 + FONT_HEIGHT,
+                            anchor_point=(0.5,0.5))
+        self.append(self._score)
+
+    @property
+    def value(self) -> int:
+        return int(self._score.text)
+    
+    @value.setter
+    def value(self, value:int) -> None:
+        self._score.text = str(value)
+
+def get_random_tetromino_index() -> int:
+    return randint(0, len(TETROMINOS) - 1)
+
+class Tetromino(TileGroup):
+
+    def __init__(self, index:int=None, offset:bool=True):
+        super().__init__()
+
+        # setup tilegrid
+        self._tilegrid = TileGrid(
+            tiles, pixel_shader=tiles_palette,
+            width=TETROMINO_SIZE, height=TETROMINO_SIZE,
+            tile_width=TILE_SIZE, tile_height=TILE_SIZE,
+        )
+
+        # update grid tiles (use random tetromino if not specified)
+        self.tetromino_index = index if index is not None else get_random_tetromino_index()
+
+        # move tetromino to top depending on pattern
+        if offset:
+            for i in range(TETROMINO_SIZE * TETROMINO_SIZE):
+                x, y = i % TETROMINO_SIZE, i // TETROMINO_SIZE
+                if self._tilegrid[x, y]:
+                    self.tile_y = -y
+                    break
+
+        self.append(self._tilegrid)
+
+    @property
+    def tetromino_index(self) -> int:
+        return self._index
+    
+    @tetromino_index.setter
+    def tetromino_index(self, value:int) -> None:
+        self._index = value
+        pattern, self._tile = TETROMINOS[value]["pattern"], TETROMINOS[value]["tile"]  # get tetromino data from index
+        self.grid = pattern  # update tilegrid
 
     @property
     def collided(self) -> bool:
@@ -309,19 +357,106 @@ class Tetromino(Group):
     def down(self) -> bool:
         return self.move(y=1)
 
-# game variables
-tetromino = None
-game_speed = GAME_SPEED_START
+# initialize groups to hold visual elements
+main_group = Group()
+display.root_group = main_group
+
+# load background tiles
+bg_tiles, bg_palette = adafruit_imageload.load("bitmaps/bg.bmp")
+
+# setup background color palette
+bg_palette[0] = 0x030060
+bg_palette[1] = 0x442a92
+
+# use terminalio font as tile sheet to write to background
+bg_grid = TileGrid(
+    bg_tiles, pixel_shader=bg_palette,
+    width=SCREEN_WIDTH, height=SCREEN_HEIGHT,
+    tile_width=TILE_SIZE, tile_height=TILE_SIZE,
+)
+
+# randomly generate background with "/" and "\" to create a maze
+for y in range(SCREEN_HEIGHT):
+    for x in range(SCREEN_WIDTH):
+        bg_grid[x, y] = randint(0, (bg_tiles.width // TILE_SIZE) - 1)
+
+# add background to display
+main_group.append(bg_grid)
+
+# display title image
+title_bmp = OnDiskBitmap("bitmaps/title.bmp")
+title_bmp.pixel_shader.make_transparent(8)
+title_tg = TileGrid(
+    title_bmp, pixel_shader=title_bmp.pixel_shader,
+    x=(display.width - title_bmp.width) // 2,
+    y=((SCREEN_HEIGHT - GRID_HEIGHT) // 2 * TILE_SIZE - title_bmp.height) // 2,
+)
+main_group.append(title_tg)
+
+# load tetromino tiles
+tiles, tiles_palette = adafruit_imageload.load("bitmaps/tetromino.bmp")
+tiles_palette.make_transparent(27)
+
+# setup grid container
+grid_window = Window(
+    width=GRID_WIDTH + 2, height=GRID_HEIGHT + 2,
+    x=(SCREEN_WIDTH - GRID_WIDTH - 2) // 2,
+    y=(SCREEN_HEIGHT - GRID_HEIGHT - 2) // 2 + WINDOW_OFFSET_Y,
+)
+main_group.append(grid_window)
+
+# setup grid
+grid_container = Group(x=TILE_SIZE, y=TILE_SIZE)
+tilegrid = TileGrid(
+    tiles, pixel_shader=tiles_palette,
+    width=GRID_WIDTH, height=GRID_HEIGHT,
+    tile_width=TILE_SIZE, tile_height=TILE_SIZE,
+)
+grid_container.append(tilegrid)
+grid_window.append(grid_container)
+
+# next tetromino container
+tetromino_window = Window(
+    title="Next",
+    x=grid_window.tile_x + GRID_WIDTH + 2 + WINDOW_GAP,
+    y=grid_window.tile_y,
+)
+main_group.append(tetromino_window)
+
+# high score container
+high_score_window = ScoreWindow(
+    title="High Points",
+    x=tetromino_window.tile_x,
+    y=grid_window.tile_y + WINDOW_HEIGHT + WINDOW_GAP,
+)
+main_group.append(high_score_window)
+
+# score container
+score_window = ScoreWindow(
+    title="Score",
+    x=tetromino_window.tile_x,
+    y=high_score_window.tile_y + high_score_window.tile_height + WINDOW_GAP,
+)
+main_group.append(score_window)
 
 # initial display refresh
 display.refresh(target_frames_per_second=30)
 
+# game variables
+current_tetromino = None
+game_speed = GAME_SPEED_START
+
+next_tetromino = Tetromino(offset=False)
+next_tetromino.tile_x = (WINDOW_WIDTH - TETROMINO_SIZE) // 2
+next_tetromino.y = ((WINDOW_HEIGHT - 2) * TILE_SIZE - FONT_HEIGHT) // 2 + TILE_SIZE + FONT_HEIGHT - TETROMINO_SIZE * TILE_SIZE // 2
+tetromino_window.append(next_tetromino)
+
 def reset_game() -> None:
-    global tetromino, tilegrid, game_speed
+    global current_tetromino, tilegrid, game_speed
 
     # reset old tetromino
-    del tetromino
-    tetromino = None
+    del current_tetromino
+    current_tetromino = None
 
     # clear grid
     for y in range(GRID_HEIGHT):
@@ -331,17 +466,24 @@ def reset_game() -> None:
     # reset game variables
     game_speed = GAME_SPEED_START
 
-def update_tetromino() -> None:
-    global tetromino, game_speed, tilegrid
+def get_next_tetromino() -> None:
+    global current_tetromino, next_tetromino
 
+    current_tetromino = Tetromino(next_tetromino.tetromino_index)
+    current_tetromino.tile_x = (GRID_WIDTH - TETROMINO_SIZE) // 2  # center along x axis of grid
+    grid_container.append(current_tetromino)
+
+    next_tetromino.tetromino_index = get_random_tetromino_index()
+
+def update_tetromino() -> None:
+    global current_tetromino, game_speed, tilegrid
+    
     # generate new tetromino
-    if tetromino is None:
-        index = randint(0, len(TETROMINOS) - 1)
-        tetromino = Tetromino(TETROMINOS[index]["pattern"], TETROMINOS[index]["tile"])
-        grid_group.append(tetromino)
-    elif tetromino.check_collide(y=1):  # place if collided
-        tetromino.place()
-        grid_group.remove(tetromino)
+    if current_tetromino is None:
+        get_next_tetromino()
+    elif current_tetromino.check_collide(y=1):  # place if collided
+        current_tetromino.place()
+        grid_container.remove(current_tetromino)
 
         # check for line clearing
         did_clear = False
@@ -366,18 +508,17 @@ def update_tetromino() -> None:
             game_speed *= GAME_SPEED_MOD
 
         # check if final move
-        if tetromino.tile_y <= 0 and not did_clear:
+        if current_tetromino.tile_y <= 0 and not did_clear:
             reset_game()  # TODO: game over
         
         # reset old tetromino
-        del tetromino
-        tetromino = None
+        del current_tetromino
+        current_tetromino = None
     else:  # move tetromino down
-        tetromino.tile_y += 1
+        current_tetromino.tile_y += 1
 
 async def tetromino_handler() -> None:
-    global tetromino, tilegrid, game_speed
-
+    global game_speed
     while True:
         update_tetromino()
         await asyncio.sleep(game_speed)
@@ -385,7 +526,7 @@ async def tetromino_handler() -> None:
 buttons = Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
 
 async def input_handler() -> None:
-    global tetromino, buttons
+    global current_tetromino, buttons
 
     while True:
 
@@ -393,36 +534,36 @@ async def input_handler() -> None:
         if available := supervisor.runtime.serial_bytes_available:
             key = sys.stdin.read(available).lower()
 
-            if tetromino is not None:
+            if current_tetromino is not None:
                 # up
                 if key == "w" or key == "\x1b[a" or key == " " or key == "\n":
-                    tetromino.rotate()
+                    current_tetromino.rotate()
                 
                 # left
                 if key == "a" or key == "\x1b[d":
-                    tetromino.left()
+                    current_tetromino.left()
                 
                 # right
                 if key == "d" or key == "\x1b[c":
-                    tetromino.right()
+                    current_tetromino.right()
 
                 # down
                 if key == "s" or key == "\x1b[b":
-                    tetromino.down()
+                    current_tetromino.down()
 
             if key == "q":
                 supervisor.reload()
 
         # check hardware buttons
         if (event := buttons.events.get()) and event.pressed:
-            if tetromino is not None:
+            if current_tetromino is not None:
                 # button #1
                 if event.key_number == 0:
-                    tetromino.down()
+                    current_tetromino.down()
                 
                 # button #2
                 if event.key_number == 1:
-                    tetromino.rotate()
+                    current_tetromino.rotate()
             
             # button #3
             if event.key_number == 2:
