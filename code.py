@@ -28,7 +28,6 @@ GAME_SPEED_START = 1
 GAME_SPEED_MOD = 0.98  # modifies the game speed when line is cleared
 WINDOW_GAP = 2
 WINDOW_WIDTH = (SCREEN_WIDTH - GRID_WIDTH - 2) // 2 - WINDOW_GAP * 2
-WINDOW_HEIGHT = (GRID_HEIGHT + 2 - WINDOW_GAP * 2) // 3
 FONT_HEIGHT = terminalio.FONT.get_bounding_box()[1]
 
 TETROMINOS = [
@@ -138,7 +137,7 @@ class TileGroup(Group):
     
 class Window(TileGroup):
 
-    def __init__(self, title:str="", width:int=WINDOW_WIDTH, height:int=WINDOW_HEIGHT, x:int=0, y:int=0, background_color=0x000000, border_color=0xffffff, title_color=0xffffff):
+    def __init__(self, text:str="", width:int=WINDOW_WIDTH, height:int=3, x:int=0, y:int=0, background_color=0x000000, border_color=0xffffff, title_color=0xffffff):
         global window_tiles, window_palette
         super().__init__(
             x=x * TILE_SIZE,
@@ -162,12 +161,12 @@ class Window(TileGroup):
         self._update_tiles()
         self.append(self._tg)
 
-        if len(title):
-            self._title = Label(terminalio.FONT,
-                                text=title, color=title_color,
-                                x=TILE_SIZE, y=TILE_SIZE,
-                                anchor_point=(0,0))
-            self.append(self._title)
+        if len(text):
+            global text_group
+            self._text = Label(terminalio.FONT, text=text, color=title_color)
+            self._text.anchor_point = (0, 0)
+            self._text.anchored_position = ((self.x + TILE_SIZE) * SCALE + 1, (self.y + TILE_SIZE) * SCALE - 1)
+            text_group.append(self._text)
     
     def _update_tiles(self) -> None:
         # set corner tiles
@@ -212,23 +211,44 @@ class Window(TileGroup):
     
 class ScoreWindow(Window):
     
-    def __init__(self, title:str="Score", x:int=0, y:int=0):
-        super().__init__(title=title, x=x, y=y)
-
-        self._score = Label(terminalio.FONT,
-                            text="0", color=0xffffff,
-                            x=self.width // 2,
-                            y=self.height // 2 + FONT_HEIGHT,
-                            anchor_point=(0.5,0.5))
+    def __init__(self, high_score:int=0, **args):
+        super().__init__(
+            text="High{:s}{:s}Score".format(" Score" if SCALE - 1 else "", "\n" * SCALE),
+            height=(FONT_HEIGHT * 2) // TILE_SIZE + 2,
+            **args
+        )
+        self._score = Label(terminalio.FONT, text="0\n0", color=0xffffff)
+        self._score.anchor_point = (1, 0)
+        self._score.anchored_position = (self.width - TILE_SIZE - 1, TILE_SIZE - 1)
         self.append(self._score)
 
+        self.high_score = high_score
+        self.score = 0
+
     @property
-    def value(self) -> int:
-        return int(self._score.text)
+    def values(self) -> tuple:
+        return tuple([int(x) for x in self._score.text.split("\n")])
     
-    @value.setter
-    def value(self, value:int) -> None:
-        self._score.text = str(value)
+    @values.setter
+    def values(self, value:tuple) -> None:
+        self._score.text = "\n".join([str(x) for x in value])
+
+    @property
+    def score(self) -> int:
+        return self.values[0]
+    
+    @score.setter
+    def score(self, value:int) -> None:
+        current = self.values[0]
+        self.values = (value if value > current else current, value)
+
+    @property
+    def high_score(self) -> int:
+        return self.values[0]
+    
+    @high_score.setter
+    def high_score(self, value:int) -> None:
+        self.values = (value, self.values[1])
 
 def get_random_tetromino_index() -> int:
     return randint(0, len(TETROMINOS) - 1)
@@ -415,31 +435,27 @@ title_bmp.pixel_shader.make_transparent(8)
 title_tg = TileGrid(
     title_bmp, pixel_shader=title_bmp.pixel_shader,
     y=grid_window.y,
-    x=(display.width - (GRID_WIDTH + 2) * TILE_SIZE) // 4 - title_bmp.width // 2,
+    x=((SCREEN_WIDTH - GRID_WIDTH - 2) * TILE_SIZE) // 4 - title_bmp.width // 2,
 )
 main_group.append(title_tg)
 
 # next tetromino container
 tetromino_window = Window(
-    title="Next",
+    text="Next",
+    height=4,
     x=grid_window.tile_x + GRID_WIDTH + 2 + WINDOW_GAP,
     y=grid_window.tile_y,
 )
 main_group.append(tetromino_window)
 
-# high score container
-high_score_window = ScoreWindow(
-    title="High Points",
-    x=tetromino_window.tile_x,
-    y=grid_window.tile_y + WINDOW_HEIGHT + WINDOW_GAP,
-)
-main_group.append(high_score_window)
+next_tetromino = Tetromino(offset=False)
+next_tetromino.tile_x = WINDOW_WIDTH - TETROMINO_SIZE - 1
+tetromino_window.append(next_tetromino)
 
-# score container
+# high score container
 score_window = ScoreWindow(
-    title="Score",
     x=tetromino_window.tile_x,
-    y=high_score_window.tile_y + high_score_window.tile_height + WINDOW_GAP,
+    y=grid_window.tile_y + tetromino_window.tile_height + WINDOW_GAP,
 )
 main_group.append(score_window)
 
@@ -449,14 +465,10 @@ display.refresh(target_frames_per_second=30)
 # game variables
 current_tetromino = None
 game_speed = GAME_SPEED_START
-
-next_tetromino = Tetromino(offset=False)
-next_tetromino.tile_x = (WINDOW_WIDTH - TETROMINO_SIZE) // 2
-next_tetromino.y = ((WINDOW_HEIGHT - 2) * TILE_SIZE - FONT_HEIGHT) // 2 + TILE_SIZE + FONT_HEIGHT - TETROMINO_SIZE * TILE_SIZE // 2
-tetromino_window.append(next_tetromino)
+current_level = 0
 
 def reset_game() -> None:
-    global current_tetromino, tilegrid, game_speed
+    global current_tetromino, tilegrid, game_speed, score_window
 
     # reset old tetromino
     del current_tetromino
@@ -469,6 +481,7 @@ def reset_game() -> None:
 
     # reset game variables
     game_speed = GAME_SPEED_START
+    score_window.score = 0
 
 def get_next_tetromino() -> None:
     global current_tetromino, next_tetromino
@@ -478,6 +491,7 @@ def get_next_tetromino() -> None:
     grid_container.append(current_tetromino)
 
     next_tetromino.tetromino_index = get_random_tetromino_index()
+    next_tetromino.rotate_left()
 
 def update_tetromino() -> None:
     global current_tetromino, game_speed, tilegrid
