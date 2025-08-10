@@ -14,12 +14,13 @@ from adafruit_display_text.label import Label
 from adafruit_fruitjam.peripherals import request_display_config
 import adafruit_imageload
 
-request_display_config(320, 240)
+request_display_config(640, 480)
 display = supervisor.runtime.display
 
 TILE_SIZE = 8
-SCREEN_WIDTH = display.width // TILE_SIZE
-SCREEN_HEIGHT = display.height // TILE_SIZE
+SCALE = 2 if display.width > 360 else 1
+SCREEN_WIDTH = display.width // SCALE // TILE_SIZE
+SCREEN_HEIGHT = display.height // SCALE // TILE_SIZE
 GRID_WIDTH = 10
 GRID_HEIGHT = 24
 TETROMINO_SIZE = 4
@@ -106,9 +107,16 @@ def copy_palette(palette:Palette) -> Palette:
             clone.make_transparent(i)
     return clone
 
+# load background tiles
+bg_tiles, bg_palette = adafruit_imageload.load("bitmaps/bg.bmp")
+
 # load window border tiles
 window_tiles, window_palette = adafruit_imageload.load("bitmaps/window.bmp")
 window_palette.make_transparent(2)
+
+# load tetromino tiles
+tiles, tiles_palette = adafruit_imageload.load("bitmaps/tetromino.bmp")
+tiles_palette.make_transparent(27)
 
 class TileGroup(Group):
 
@@ -359,11 +367,10 @@ class Tetromino(TileGroup):
         return self.move(y=1)
 
 # initialize groups to hold visual elements
-main_group = Group()
-display.root_group = main_group
-
-# load background tiles
-bg_tiles, bg_palette = adafruit_imageload.load("bitmaps/bg.bmp")
+text_group = Group()
+main_group = Group(scale=SCALE)
+text_group.append(main_group)
+display.root_group = text_group
 
 # setup background color palette
 bg_palette[0] = 0x030060
@@ -383,10 +390,6 @@ for y in range(SCREEN_HEIGHT):
 
 # add background to display
 main_group.append(bg_grid)
-
-# load tetromino tiles
-tiles, tiles_palette = adafruit_imageload.load("bitmaps/tetromino.bmp")
-tiles_palette.make_transparent(27)
 
 # setup grid container
 grid_window = Window(
