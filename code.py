@@ -21,12 +21,12 @@ TILE_SIZE = 8
 SCALE = 2 if display.width > 360 else 1
 SCREEN_WIDTH = display.width // SCALE // TILE_SIZE
 SCREEN_HEIGHT = display.height // SCALE // TILE_SIZE
+WINDOW_GAP = 1
 GRID_WIDTH = 10
-GRID_HEIGHT = 24
+GRID_HEIGHT = SCREEN_HEIGHT - WINDOW_GAP * 2 - 2
 TETROMINO_SIZE = 4
 GAME_SPEED_START = 1
 GAME_SPEED_MOD = 0.98  # modifies the game speed when line is cleared
-WINDOW_GAP = 2
 WINDOW_WIDTH = (SCREEN_WIDTH - GRID_WIDTH - 2) // 2 - WINDOW_GAP * 2
 FONT_HEIGHT = terminalio.FONT.get_bounding_box()[1]
 
@@ -117,9 +117,12 @@ window_palette.make_transparent(2)
 tiles, tiles_palette = adafruit_imageload.load("bitmaps/tetromino.bmp")
 tiles_palette.make_transparent(27)
 
-# load faces
+# load face tiles
 face_bmp, face_palette = adafruit_imageload.load("bitmaps/face.bmp")
 face_palette.make_transparent(2)
+
+# load drink bitmap
+drink_bmp = OnDiskBitmap("bitmaps/drink.bmp")
 
 class TileGroup(Group):
 
@@ -202,46 +205,57 @@ class Window(TileGroup):
     def height(self) -> int:
         return self._tg.height * TILE_SIZE
     
-class ScoreWindow(Window):
+class NumberWindow(Window):
+    def __init__(self, label:str|tuple, value:int|tuple=0, height:int=None, **args):
+        if type(label) is not tuple:
+            label = (label,)
+        super().__init__(
+            text=("\n" * SCALE).join(label),
+            height=(FONT_HEIGHT * len(label)) // TILE_SIZE + 2 if height is None else height,
+            **args
+        )
+        self._value = Label(terminalio.FONT, color=0xffffff)
+        self._value.anchor_point = (1, 0)
+        self._value.anchored_position = (self.width - TILE_SIZE - 1, TILE_SIZE - 1)
+        self.value = value
+        self.append(self._value)
+
+    @property
+    def value(self) -> int|tuple:
+        value = tuple([int(x) for x in self._score.text.split("\n")])
+        return value[0] if len(value) == 1 else value
+    
+    @value.setter
+    def value(self, value:int|tuple) -> None:
+        if type(value) is not tuple:
+            value = (value,)
+        self._value.text = "\n".join([str(x) for x in value])
+    
+class ScoreWindow(NumberWindow):
     
     def __init__(self, high_score:int=0, **args):
         super().__init__(
-            text="High{:s}{:s}Score".format(" Score" if SCALE - 1 else "", "\n" * SCALE),
-            height=(FONT_HEIGHT * 2) // TILE_SIZE + 2,
+            label=("High" + " Score" if SCALE - 1 else "", "Score"),
+            value=(high_score, 0),
             **args
         )
-        self._score = Label(terminalio.FONT, text="0\n0", color=0xffffff)
-        self._score.anchor_point = (1, 0)
-        self._score.anchored_position = (self.width - TILE_SIZE - 1, TILE_SIZE - 1)
-        self.append(self._score)
-
-        self.high_score = high_score
-        self.score = 0
-
-    @property
-    def values(self) -> tuple:
-        return tuple([int(x) for x in self._score.text.split("\n")])
-    
-    @values.setter
-    def values(self, value:tuple) -> None:
-        self._score.text = "\n".join([str(x) for x in value])
 
     @property
     def score(self) -> int:
-        return self.values[0]
+        return self.value[0]
     
     @score.setter
     def score(self, value:int) -> None:
-        current = self.values[0]
-        self.values = (value if value > current else current, value)
+        current = self.value[0]
+        self.value = (value if value > current else current, value)
 
     @property
     def high_score(self) -> int:
-        return self.values[0]
+        return self.value[0]
     
     @high_score.setter
     def high_score(self, value:int) -> None:
-        self.values = (value, self.values[1])
+        self.value = (value, self.value[1])
 
 def get_random_tetromino_index() -> int:
     return randint(0, len(TETROMINOS) - 1)
@@ -441,7 +455,7 @@ main_group.append(title_tg)
 tetromino_window = Window(
     text="Next",
     height=4,
-    x=grid_window.tile_x + GRID_WIDTH + 2 + WINDOW_GAP,
+    x=grid_window.tile_x + grid_window.tile_width + WINDOW_GAP,
     y=grid_window.tile_y,
 )
 main_group.append(tetromino_window)
@@ -475,6 +489,22 @@ face_tg = TileGrid(
 face_tg.x = (face_window.width - face_tg.tile_width) // 2
 face_tg.y = (face_window.height - face_tg.tile_height) // 2
 face_window.append(face_tg)
+
+# drink
+drink_window_y = tetromino_window.tile_y + (title_bmp.height // TILE_SIZE) + WINDOW_GAP
+drink_window = NumberWindow(
+    label="Level", value=1,
+    x=WINDOW_GAP, y=drink_window_y,
+    height=grid_window.tile_height + grid_window.tile_y - drink_window_y,
+)
+main_group.append(drink_window)
+
+drink_tg = TileGrid(
+    drink_bmp, pixel_shader=drink_bmp.pixel_shader,
+    x=(drink_window.width - drink_bmp.width) // 2,
+    y=drink_window.height - TILE_SIZE - drink_bmp.height - (drink_window.width - TILE_SIZE * 2 - drink_bmp.width) // 2,
+)
+drink_window.append(drink_tg)
 
 # initial display refresh
 display.refresh(target_frames_per_second=30)
