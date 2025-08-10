@@ -25,7 +25,6 @@ GRID_HEIGHT = 20
 TETROMINO_SIZE = 4
 GAME_SPEED_START = 1
 GAME_SPEED_MOD = 0.98  # modifies the game speed when line is cleared
-WINDOW_OFFSET_Y = 1
 WINDOW_GAP = 2
 WINDOW_WIDTH = (SCREEN_WIDTH - GRID_WIDTH - 2) // 2 - WINDOW_GAP * 2
 WINDOW_HEIGHT = (GRID_HEIGHT + 2 - WINDOW_GAP * 2) // 3
@@ -385,16 +384,6 @@ for y in range(SCREEN_HEIGHT):
 # add background to display
 main_group.append(bg_grid)
 
-# display title image
-title_bmp = OnDiskBitmap("bitmaps/title.bmp")
-title_bmp.pixel_shader.make_transparent(8)
-title_tg = TileGrid(
-    title_bmp, pixel_shader=title_bmp.pixel_shader,
-    x=(display.width - title_bmp.width) // 2,
-    y=((SCREEN_HEIGHT - GRID_HEIGHT) // 2 * TILE_SIZE - title_bmp.height) // 2,
-)
-main_group.append(title_tg)
-
 # load tetromino tiles
 tiles, tiles_palette = adafruit_imageload.load("bitmaps/tetromino.bmp")
 tiles_palette.make_transparent(27)
@@ -403,7 +392,7 @@ tiles_palette.make_transparent(27)
 grid_window = Window(
     width=GRID_WIDTH + 2, height=GRID_HEIGHT + 2,
     x=(SCREEN_WIDTH - GRID_WIDTH - 2) // 2,
-    y=(SCREEN_HEIGHT - GRID_HEIGHT - 2) // 2 + WINDOW_OFFSET_Y,
+    y=(SCREEN_HEIGHT - GRID_HEIGHT - 2) // 2,
 )
 main_group.append(grid_window)
 
@@ -416,6 +405,16 @@ tilegrid = TileGrid(
 )
 grid_container.append(tilegrid)
 grid_window.append(grid_container)
+
+# display title image
+title_bmp = OnDiskBitmap("bitmaps/title.bmp")
+title_bmp.pixel_shader.make_transparent(8)
+title_tg = TileGrid(
+    title_bmp, pixel_shader=title_bmp.pixel_shader,
+    y=grid_window.y,
+    x=(display.width - (GRID_WIDTH + 2) * TILE_SIZE) // 4 - title_bmp.width // 2,
+)
+main_group.append(title_tg)
 
 # next tetromino container
 tetromino_window = Window(
