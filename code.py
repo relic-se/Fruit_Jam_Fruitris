@@ -162,17 +162,7 @@ class Window(TileGroup):
             tile_width=TILE_SIZE, tile_height=TILE_SIZE,
             default_tile=4,  # center tile
         )
-        self._update_tiles()
-        self.append(self._tg)
 
-        if len(text):
-            global text_group
-            self._text = Label(terminalio.FONT, text=text, color=title_color)
-            self._text.anchor_point = (0, 0)
-            self._text.anchored_position = ((self.x + TILE_SIZE) * SCALE + 1, (self.y + TILE_SIZE) * SCALE - 1)
-            text_group.append(self._text)
-    
-    def _update_tiles(self) -> None:
         # set corner tiles
         self._tg[0, 0] = 0
         self._tg[self._tg.width - 1, 0] = 2
@@ -187,23 +177,22 @@ class Window(TileGroup):
             self._tg[0, i] = 3
             self._tg[self._tg.width - 1, i] = 5
 
+        self.append(self._tg)
+
+        if len(text):
+            global text_group
+            self._text = Label(terminalio.FONT, text=text, color=title_color)
+            self._text.anchor_point = (0, 0)
+            self._text.anchored_position = ((self.x + TILE_SIZE) * SCALE + 1, (self.y + TILE_SIZE) * SCALE - 1)
+            text_group.append(self._text)
+    
     @property
     def tile_width(self) -> int:
         return self._tg.width
     
-    @tile_width.setter
-    def tile_width(self, value:int) -> None:
-        self._tg.width = value
-        self._update_tiles()
-    
     @property
     def tile_height(self) -> int:
         return self._tg.height
-    
-    @tile_height.setter
-    def tile_height(self, value:int) -> None:
-        self._tg.height = value
-        self._update_tiles()
 
     @property
     def width(self) -> int:
