@@ -27,6 +27,7 @@ GRID_HEIGHT = SCREEN_HEIGHT - WINDOW_GAP * 2 - 2
 TETROMINO_SIZE = 4
 GAME_SPEED_START = 1
 GAME_SPEED_MOD = 0.98  # modifies the game speed when line is cleared
+LINES_PER_LEVEL = 20
 WINDOW_WIDTH = (SCREEN_WIDTH - GRID_WIDTH - 2) // 2 - WINDOW_GAP * 2
 FONT_HEIGHT = terminalio.FONT.get_bounding_box()[1]
 
@@ -123,6 +124,8 @@ face_palette.make_transparent(2)
 
 # load drink bitmap
 drink_bmp = OnDiskBitmap("bitmaps/drink.bmp")
+drink_map = (12, 3, 5, 4, 1, 10, 14, 9, 7, 6, 8)  # convert level index to palette index
+drink_map = tuple([(x, drink_bmp.pixel_shader[x]) for x in drink_map])  # copy colors
 
 class TileGroup(Group):
 
@@ -222,7 +225,7 @@ class NumberWindow(Window):
 
     @property
     def value(self) -> int|tuple:
-        value = tuple([int(x) for x in self._score.text.split("\n")])
+        value = tuple([int(x) for x in self._value.text.split("\n")])
         return value[0] if len(value) == 1 else value
     
     @value.setter
@@ -506,16 +509,16 @@ drink_tg = TileGrid(
 )
 drink_window.append(drink_tg)
 
-# initial display refresh
-display.refresh(target_frames_per_second=30)
+def set_drink_level(value:float) -> None:
+    global current_level
+    current_color = drink_map[current_level % len(drink_map)][1]
+    value = int(value * (len(drink_map) - 1))
+    for i, color in enumerate(drink_map):
+        drink_tg.pixel_shader[color[0]] = current_color if value >= i else 0x000000
 
-# game variables
 current_tetromino = None
-game_speed = GAME_SPEED_START
-current_level = 0
-
 def reset_game() -> None:
-    global current_tetromino, tilegrid, game_speed, score_window
+    global current_tetromino, current_lines, current_level, tilegrid, game_speed, score_window
 
     # reset old tetromino
     del current_tetromino
@@ -532,6 +535,19 @@ def reset_game() -> None:
     # reset game variables
     game_speed = GAME_SPEED_START
     score_window.score = 0
+    current_level = 0
+    current_lines = 0
+    set_drink_level(0)
+reset_game()
+
+def add_lines(lines:int) -> None:
+    global current_level, current_lines
+    score_window.score += (40, 100, 300, 1200)[lines - 1] * (current_level + 1)
+    current_lines += lines
+    set_drink_level(current_lines / LINES_PER_LEVEL)
+    if current_lines > LINES_PER_LEVEL:
+        current_level += 1
+        current_lines = 0
 
 def get_next_tetromino() -> None:
     global current_tetromino, next_tetromino
@@ -543,7 +559,7 @@ def get_next_tetromino() -> None:
     next_tetromino.tetromino_index = get_random_tetromino_index()
 
 def update_tetromino() -> None:
-    global current_tetromino, current_level, game_speed, tilegrid, score_window
+    global current_tetromino, current_level, current_lines, game_speed, tilegrid, score_window
     
     # generate new tetromino
     if current_tetromino is None:
@@ -575,7 +591,7 @@ def update_tetromino() -> None:
         
         if lines:
             game_speed *= GAME_SPEED_MOD
-            score_window.score += (40, 100, 300, 1200)[lines - 1] * (current_level + 1)
+            add_lines(lines)
 
         # check if final move
         if current_tetromino.tile_y <= 0 and not lines:
@@ -649,5 +665,8 @@ async def main():
         asyncio.create_task(tetromino_handler()),
         asyncio.create_task(input_handler())
     )
+
+# initial display refresh
+display.refresh(target_frames_per_second=30)
 
 asyncio.run(main())
