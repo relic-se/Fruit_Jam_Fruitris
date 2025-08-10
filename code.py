@@ -266,6 +266,7 @@ class Tetromino(TileGroup):
         )
 
         # update grid tiles (use random tetromino if not specified)
+        self._rotation = 0
         self.tetromino_index = index if index is not None else get_random_tetromino_index()
 
         # move tetromino to top depending on pattern
@@ -317,10 +318,15 @@ class Tetromino(TileGroup):
     
     @grid.setter
     def grid(self, value:list) -> None:
+        self._grid(value)
+        for i in range(self._rotation):
+            self._rotate_right(True)
+
+    def _grid(self, value:list) -> None:
         for y in range(TETROMINO_SIZE):
             for x in range(TETROMINO_SIZE):
                 self._tilegrid[x, y] = self._tile if value[y][x] else 0
-    
+
     def place(self) -> None:
         global tilegrid
         for y in range(TETROMINO_SIZE):
@@ -329,10 +335,11 @@ class Tetromino(TileGroup):
                 if self._tilegrid[x, y] and 0 <= grid_x < GRID_WIDTH and 0 <= grid_y < GRID_HEIGHT:
                     tilegrid[grid_x, grid_y] = self._tilegrid[x, y]
 
-    def rotate(self) -> bool:
-        return self.rotate_right()
+    def rotate_right(self, force:bool = False) -> None:
+        if self._rotate_right(force):
+            self._rotation = (self._rotation + 1) % 4
 
-    def rotate_right(self) -> bool:
+    def _rotate_right(self, force:bool = False) -> bool:
         # rotate grid into copy
         grid = [
             [
@@ -343,16 +350,16 @@ class Tetromino(TileGroup):
         ]
 
         # check if rotated piece fits
-        if self.check_collide(grid):
-            return False
-        
-        # update grid
-        for y in range(TETROMINO_SIZE):
-            for x in range(TETROMINO_SIZE):
-                self._tilegrid[x, y] = grid[y][x]
-        return True
-    
-    def rotate_left(self) -> bool:
+        if force or not self.check_collide(grid):
+            self._grid(grid)  # update grid
+            return True
+        return False
+
+    def rotate_left(self, force:bool = False) -> None:
+        if self._rotate_left(force):
+            self._rotation = (self._rotation - 1) % 4
+     
+    def _rotate_left(self, force:bool = False) -> bool:
         # rotate grid into copy
         grid = [
             [
@@ -363,12 +370,10 @@ class Tetromino(TileGroup):
         ]
 
         # check if rotated piece fits
-        if self.check_collide(grid):
-            return False
-        
-        # update grid
-        self.grid = grid
-        return True
+        if force or not self.check_collide(grid):
+            self._grid(grid)  # update grid
+            return True
+        return False
     
     def move(self, x:int=0, y:int=0) -> bool:
         if self.check_collide(x=x, y=y):
@@ -450,6 +455,7 @@ main_group.append(tetromino_window)
 
 next_tetromino = Tetromino(offset=False)
 next_tetromino.tile_x = WINDOW_WIDTH - TETROMINO_SIZE - 1
+next_tetromino.rotate_left(True)
 tetromino_window.append(next_tetromino)
 
 # high score container
@@ -491,7 +497,6 @@ def get_next_tetromino() -> None:
     grid_container.append(current_tetromino)
 
     next_tetromino.tetromino_index = get_random_tetromino_index()
-    next_tetromino.rotate_left()
 
 def update_tetromino() -> None:
     global current_tetromino, current_level, game_speed, tilegrid, score_window
@@ -556,7 +561,7 @@ async def input_handler() -> None:
             if current_tetromino is not None:
                 # up
                 if key == "w" or key == "\x1b[a" or key == " " or key == "\n":
-                    current_tetromino.rotate()
+                    current_tetromino.rotate_right()
                 
                 # left
                 if key == "a" or key == "\x1b[d":
@@ -582,7 +587,7 @@ async def input_handler() -> None:
                 
                 # button #2
                 if event.key_number == 1:
-                    current_tetromino.rotate()
+                    current_tetromino.rotate_right()
             
             # button #3
             if event.key_number == 2:
