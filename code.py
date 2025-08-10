@@ -109,6 +109,7 @@ def copy_palette(palette:Palette) -> Palette:
 
 # load window border tiles
 window_tiles, window_palette = adafruit_imageload.load("bitmaps/window.bmp")
+window_palette.make_transparent(2)
 
 class TileGroup(Group):
 
@@ -141,7 +142,8 @@ class Window(TileGroup):
             raise ValueError("width/height must be at least 3 tiles")
         
         palette = copy_palette(window_palette)
-        # TODO: apply background_color and border_color
+        palette[1] = background_color
+        palette[3] = border_color
 
         # load grid border tiles, setup palette and tilegrid
         self._tg = TileGrid(
