@@ -494,7 +494,7 @@ def get_next_tetromino() -> None:
     next_tetromino.rotate_left()
 
 def update_tetromino() -> None:
-    global current_tetromino, game_speed, tilegrid
+    global current_tetromino, current_level, game_speed, tilegrid, score_window
     
     # generate new tetromino
     if current_tetromino is None:
@@ -504,15 +504,15 @@ def update_tetromino() -> None:
         grid_container.remove(current_tetromino)
 
         # check for line clearing
-        did_clear = False
-        for y in range(GRID_HEIGHT):
+        lines = 0
+        for y in range(max(current_tetromino.tile_y, 0), min(current_tetromino.tile_y + TETROMINO_SIZE, GRID_HEIGHT)):
             cleared = True
             for x in range(GRID_WIDTH):
                 if not tilegrid[x, y]:
                     cleared = False
                     break
             if cleared:
-                did_clear = True
+                lines += 1
                 # move tiles down (clears current line)
                 for i in range(y, 1, -1):
                     for x in range(GRID_WIDTH):
@@ -522,11 +522,12 @@ def update_tetromino() -> None:
                 for x in range(GRID_WIDTH):
                     tilegrid[x, 0] = 0
         
-        if did_clear:
+        if lines:
             game_speed *= GAME_SPEED_MOD
+            score_window.score += (40, 100, 300, 1200)[lines - 1] * (current_level + 1)
 
         # check if final move
-        if current_tetromino.tile_y <= 0 and not did_clear:
+        if current_tetromino.tile_y <= 0 and not lines:
             reset_game()  # TODO: game over
         
         # reset old tetromino
