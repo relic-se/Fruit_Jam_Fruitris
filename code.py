@@ -117,6 +117,10 @@ window_palette.make_transparent(2)
 tiles, tiles_palette = adafruit_imageload.load("bitmaps/tetromino.bmp")
 tiles_palette.make_transparent(27)
 
+# load faces
+face_bmp, face_palette = adafruit_imageload.load("bitmaps/face.bmp")
+face_palette.make_transparent(2)
+
 class TileGroup(Group):
 
     @property
@@ -137,7 +141,7 @@ class TileGroup(Group):
     
 class Window(TileGroup):
 
-    def __init__(self, text:str="", width:int=WINDOW_WIDTH, height:int=3, x:int=0, y:int=0, background_color=0x000000, border_color=0xffffff, title_color=0xffffff):
+    def __init__(self, text:str="", width:int=WINDOW_WIDTH, height:int=3, x:int=0, y:int=0, background_color=0x000000, border_color=0x808080, title_color=0xffffff):
         global window_tiles, window_palette
         super().__init__(
             x=x * TILE_SIZE,
@@ -465,6 +469,24 @@ score_window = ScoreWindow(
 )
 main_group.append(score_window)
 
+# face
+face_window = Window(
+    background_color=0xd0d0d0,
+    height=6,
+    x=score_window.tile_x,
+)
+face_window.tile_y = grid_window.tile_y + grid_window.tile_height - face_window.tile_height
+main_group.append(face_window)
+
+face_tg = TileGrid(
+    face_bmp, pixel_shader=face_palette,
+    width=1, height=1,
+    tile_width=face_bmp.width // 4, tile_height=face_bmp.height,
+)
+face_tg.x = (face_window.width - face_tg.tile_width) // 2
+face_tg.y = (face_window.height - face_tg.tile_height) // 2
+face_window.append(face_tg)
+
 # initial display refresh
 display.refresh(target_frames_per_second=30)
 
@@ -485,6 +507,9 @@ def reset_game() -> None:
         for x in range(GRID_WIDTH):
             tilegrid[x, y] = 0
 
+    # update face
+    face_tg[0, 0] = (face_bmp.width // face_tg.tile_width) - 1
+
     # reset game variables
     game_speed = GAME_SPEED_START
     score_window.score = 0
@@ -504,6 +529,8 @@ def update_tetromino() -> None:
     # generate new tetromino
     if current_tetromino is None:
         get_next_tetromino()
+        if face_tg[0, 0] > 2:
+            face_tg[0, 0] = 0  # reset face
     elif current_tetromino.check_collide(y=1):  # place if collided
         current_tetromino.place()
         grid_container.remove(current_tetromino)
@@ -534,10 +561,13 @@ def update_tetromino() -> None:
         # check if final move
         if current_tetromino.tile_y <= 0 and not lines:
             reset_game()  # TODO: game over
+        else:  # update face
+            face_tg[0, 0] = ((GRID_HEIGHT - current_tetromino.tile_y) * 3) // GRID_HEIGHT
         
         # reset old tetromino
         del current_tetromino
         current_tetromino = None
+
     else:  # move tetromino down
         current_tetromino.tile_y += 1
 
