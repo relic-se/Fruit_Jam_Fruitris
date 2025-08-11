@@ -1,4 +1,5 @@
 adafruit_display_text
 adafruit_fruitjam
+adafruit_hid
 adafruit_imageload
 asyncio

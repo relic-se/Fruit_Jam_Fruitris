@@ -9,7 +9,6 @@ from micropython import const
 import os
 from random import randint
 import supervisor
-import sys
 import terminalio
 import time
 
@@ -700,6 +699,7 @@ gamepad_map = (
     (gamepad.START, ACTION_QUIT),
     (gamepad.LEFT,  ACTION_LEFT),
     (gamepad.RIGHT, ACTION_RIGHT),
+    (gamepad.UP,    ACTION_ROTATE),
 )
 
 async def gamepad_handler() -> None:
@@ -724,33 +724,16 @@ async def gamepad_handler() -> None:
         except (USBError, ValueError) as e:
             await asyncio.sleep(.4)
 
-key_map = (
-    ((" ", "\n"),     ACTION_ROTATE),
-    (("w", "\x1b[a"), ACTION_HARD_DROP),
-    (("a", "\x1b[d"), ACTION_LEFT),
-    (("d", "\x1b[c"), ACTION_RIGHT),
-    (("s", "\x1b[b"), ACTION_SOFT_DROP),
-    (("q",),          ACTION_QUIT),
-)
-
 button_map = (
     ACTION_SOFT_DROP,  # button #1
     ACTION_ROTATE,     # button #2
     ACTION_QUIT,       # button #3
 )
 
-async def input_handler() -> None:
+async def button_handler() -> None:
     global current_tetromino, buttons
 
     while True:
-
-        # check if any keys were pressed
-        if available := supervisor.runtime.serial_bytes_available:
-            key = sys.stdin.read(available).lower()
-            for keys, action in key_map:
-                if key in keys:
-                    do_action(action)
-                    break
 
         # check hardware buttons
         if (event := buttons.events.get()) and event.pressed:
@@ -761,8 +744,8 @@ async def input_handler() -> None:
 async def main():
     await asyncio.gather(
         asyncio.create_task(tetromino_handler()),
-        asyncio.create_task(input_handler()),
-        asyncio.create_task(gamepad_handler())
+        asyncio.create_task(gamepad_handler()),
+        asyncio.create_task(button_handler()),
     )
 
 # initial display refresh

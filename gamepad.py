@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: Copyright 2025 Sam Blenny
+# SPDX-FileCopyrightText: Copyright 2025 Cooper Dalrymple (@relic-se)
 #
 # Gamepad driver for various USB wired gamepads.
 #
@@ -20,6 +21,8 @@ from supervisor import ticks_ms
 from usb import core
 from usb.core import USBError, USBTimeoutError
 from usb.util import SPEED_HIGH
+
+from adafruit_hid.keycode import Keycode
 
 import usb_descriptor
 
@@ -416,7 +419,45 @@ class InputDevice:
             # Filter lambda trims off all the analog stuff
             return normalize_xinput(int0_gen(filter_fn=lambda d: d[2:4]))
         elif dev_type == TYPE_BOOT_KEYBOARD:
-            return int0_gen()
+            # Report format:
+            # byte 0: modifer keys
+            #         0x01=LCtrl, 0x02=LShift, 0x04=LAlt, 0x08=LGUI,
+            #         0x10=RCtrl, 0x20=RShift, 0x40=RAlt, 0x80=RGUI
+            # byte 1: reserved
+            # byte 2-7: keypress #1-6
+            #
+            def normalize_keyboard(data):
+                for d in data:
+                    if d is None:
+                        yield None
+                        continue
+                    v = 0
+                    v |= SELECT if d[0] & 0x20 else 0
+                    for key in d[2:8]:
+                        if key == Keycode.ENTER:
+                            v |= START
+                        elif key == Keycode.LEFT_ARROW:
+                            v |= LEFT
+                        elif key == Keycode.RIGHT_ARROW:
+                            v |= RIGHT
+                        elif key == Keycode.UP_ARROW:
+                            v |= UP
+                        elif key == Keycode.DOWN_ARROW:
+                            v |= DOWN
+                        elif key == Keycode.X:
+                            v |= A
+                        elif key == Keycode.Z:
+                            v |= B
+                        elif key == Keycode.D:
+                            v |= X
+                        elif key == Keycode.S:
+                            v |= Y
+                        elif key == Keycode.R:
+                            v |= R
+                        elif key == Keycode.W:
+                            v |= L
+                    yield v
+            return normalize_keyboard(int0_gen())
 
     def int0_read_generator(self, filter_fn=lambda d: d):
         # Generator function: read from interface 0 and yield raw report data
