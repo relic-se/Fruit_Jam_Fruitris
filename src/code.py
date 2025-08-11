@@ -533,6 +533,12 @@ title_tg = TileGrid(
 )
 main_group.append(title_tg)
 
+# waiting text
+waiting_text = Label(terminalio.FONT, text="Press any key\n to start...", color=0xffffff)
+waiting_text.anchor_point = (.5, .5)
+waiting_text.anchored_position = (display.width // 2, display.height // 2)
+text_group.append(waiting_text)
+
 # next tetromino container
 tetromino_window = Window(
     text="Next",
@@ -638,26 +644,65 @@ def get_next_tetromino() -> None:
 
     next_tetromino.tetromino_index = get_random_tetromino_index()
 
-def reset_game(game_over:bool = True) -> None:
-    global current_lines, level_window, tilegrid, score_window
+STATE_WAITING = const(1)
+STATE_PLAYING = const(2)
+STATE_GAME_OVER = const(3)
 
-    # generate new tetromino
-    get_next_tetromino()
+game_state = STATE_WAITING
+def reset_game() -> None:
+    global current_lines, level_window, tilegrid, score_window, game_state
 
     # clear grid
     for y in range(GRID_HEIGHT):
         for x in range(GRID_WIDTH):
             tilegrid[x, y] = 0
 
+    # generate new tetromino
+    get_next_tetromino()
+    next_tetromino.hidden = False
+
     # update face
-    face_tg[0, 0] = (face_bmp.width // face_tg.tile_width) - 1 if game_over else 0
+    face_tg[0, 0] = 0
+
+    # hide waiting text
+    waiting_text.hidden = True
 
     # reset game variables
     score_window.reset()
     level_window.value = 1
     current_lines = 0
     set_drink_level(0)
-reset_game(False)
+    game_state = STATE_PLAYING
+
+    display.refresh()
+
+async def game_over() -> None:
+    global game_state, display, tetromino, tetromino_indicator, next_tetromino
+    game_state = STATE_GAME_OVER
+
+    # hide tetrominos
+    tetromino.hidden = True
+    tetromino_indicator.hidden = True
+    next_tetromino.hidden = True
+
+    # update face
+    face_tg[0, 0] = (face_bmp.width // face_tg.tile_width) - 1
+
+    # wipe out grid
+    for y in range(GRID_HEIGHT - 1, -1, -1):
+        for x in range(GRID_WIDTH):
+            tilegrid[x, y] = (tiles.width // tilegrid.tile_width) - 1  # gray tile
+        display.refresh()
+        await asyncio.sleep(2 / GRID_HEIGHT)
+
+    game_state = STATE_WAITING
+    waiting_text.hidden = False
+
+    # clear out area for text
+    for y in range(GRID_HEIGHT // 2 - 2, GRID_HEIGHT // 2 + 2):
+        for x in range(1, GRID_WIDTH - 1):
+            tilegrid[x, y] = 0
+    display.refresh()
 
 def get_lines_per_level() -> int:
     global level_window
@@ -692,56 +737,61 @@ def add_lines(lines:int) -> None:
 
 last_drop_time = None
 async def tetromino_handler() -> None:
-    global tetromino, current_lines, tilegrid, score_window, last_drop_time
+    global tetromino, current_lines, tilegrid, score_window, last_drop_time, game_state
     while True:
 
-        # Synchronize with last manual drop
-        while last_drop_time is not None:
-            sync_drop_time = max(get_drop_speed() - (time.monotonic() - last_drop_time), 0)
-            last_drop_time = None
-            await asyncio.sleep(sync_drop_time)
-            
-        if tetromino.check_collide(y=1):  # place if collided
-            tetromino.place()
-            tetromino_indicator.hidden = True
+        if game_state == STATE_PLAYING:
 
-            # check for line clearing
-            lines = 0
-            for y in range(max(tetromino.tile_y, 0), min(tetromino.tile_y + TETROMINO_SIZE, GRID_HEIGHT)):
-                cleared = True
-                for x in range(GRID_WIDTH):
-                    if not tilegrid[x, y]:
-                        cleared = False
-                        break
-                if cleared:
-                    lines += 1
-                    # move tiles down (clears current line)
-                    for i in range(y, 1, -1):
-                        for x in range(GRID_WIDTH):
-                            tilegrid[x, i] = tilegrid[x, i - 1]
-                    
-                    # clear top line
+            # Synchronize with last manual drop
+            while last_drop_time is not None:
+                sync_drop_time = max(get_drop_speed() - (time.monotonic() - last_drop_time), 0)
+                last_drop_time = None
+                await asyncio.sleep(sync_drop_time)
+                
+            if tetromino.check_collide(y=1):  # place if collided
+                tetromino.place()
+                tetromino_indicator.hidden = True
+
+                # check for line clearing
+                lines = 0
+                for y in range(max(tetromino.tile_y, 0), min(tetromino.tile_y + TETROMINO_SIZE, GRID_HEIGHT)):
+                    cleared = True
                     for x in range(GRID_WIDTH):
-                        tilegrid[x, 0] = 0
+                        if not tilegrid[x, y]:
+                            cleared = False
+                            break
+                    if cleared:
+                        lines += 1
+                        # move tiles down (clears current line)
+                        for i in range(y, 1, -1):
+                            for x in range(GRID_WIDTH):
+                                tilegrid[x, i] = tilegrid[x, i - 1]
+                        
+                        # clear top line
+                        for x in range(GRID_WIDTH):
+                            tilegrid[x, 0] = 0
 
-            # update score
-            add_lines(lines)
+                # update score
+                add_lines(lines)
 
-            # check if final move
-            if tetromino.tile_y <= 0 and not lines:
-                reset_game()  # TODO: game over
-            else:  # update face
-                face_tg[0, 0] = ((GRID_HEIGHT - tetromino.tile_y) * 3) // GRID_HEIGHT
+                # check if final move
+                if tetromino.tile_y <= 0 and not lines:
+                    await game_over()
+                else:  # update face
+                    face_tg[0, 0] = ((GRID_HEIGHT - tetromino.tile_y) * 3) // GRID_HEIGHT
 
-            # generate new tetromino
-            get_next_tetromino()
+                if game_state == STATE_PLAYING:
+                    # generate new tetromino
+                    get_next_tetromino()
 
-        else:  # move tetromino down
-            tetromino.tile_y += 1
+            else:  # move tetromino down
+                tetromino.tile_y += 1
 
-        display.refresh()
-        
-        await asyncio.sleep(get_drop_speed())
+            display.refresh()
+            
+            await asyncio.sleep(get_drop_speed())
+        else:
+            await asyncio.sleep(1/30)
 
 ACTION_ROTATE    = const(0)
 ACTION_LEFT      = const(1)
@@ -751,31 +801,34 @@ ACTION_HARD_DROP = const(4)
 ACTION_QUIT      = const(5)
 
 def do_action(action:int) -> None:
-    global tetromino, last_drop_time
-    if action == ACTION_ROTATE:
-        if tetromino.rotate_right():
-            tetromino_indicator.rotate_right(True)
-            tetromino_indicator.tile_x = tetromino.tile_x
-            update_tetromino_indicator_y()
-    elif action == ACTION_LEFT:
-        if tetromino.left():
-            tetromino_indicator.tile_x = tetromino.tile_x
-            update_tetromino_indicator_y()
-    elif action == ACTION_RIGHT:
-        if tetromino.right():
-            tetromino_indicator.tile_x = tetromino.tile_x
-            update_tetromino_indicator_y()
-    elif action == ACTION_SOFT_DROP:
-        if tetromino.down():
-            last_drop_time = time.monotonic()
-    elif action == ACTION_HARD_DROP:
-        spaces = 0
-        while tetromino.down():
-            spaces += 1
-        score_window.score += spaces
-        if spaces:
-            last_drop_time = time.monotonic()
-    elif action == ACTION_QUIT:
+    global tetromino, last_drop_time, game_state
+    if game_state == STATE_PLAYING:
+        if action == ACTION_ROTATE:
+            if tetromino.rotate_right():
+                tetromino_indicator.rotate_right(True)
+                tetromino_indicator.tile_x = tetromino.tile_x
+                update_tetromino_indicator_y()
+        elif action == ACTION_LEFT:
+            if tetromino.left():
+                tetromino_indicator.tile_x = tetromino.tile_x
+                update_tetromino_indicator_y()
+        elif action == ACTION_RIGHT:
+            if tetromino.right():
+                tetromino_indicator.tile_x = tetromino.tile_x
+                update_tetromino_indicator_y()
+        elif action == ACTION_SOFT_DROP:
+            if tetromino.down():
+                last_drop_time = time.monotonic()
+        elif action == ACTION_HARD_DROP:
+            spaces = 0
+            while tetromino.down():
+                spaces += 1
+            score_window.score += spaces
+            if spaces:
+                last_drop_time = time.monotonic()
+    elif game_state == STATE_WAITING and action != ACTION_QUIT:
+        reset_game()
+    if action == ACTION_QUIT:
         supervisor.reload()
     
     display.refresh()
