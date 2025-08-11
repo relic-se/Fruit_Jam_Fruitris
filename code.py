@@ -5,30 +5,35 @@ import asyncio
 import board
 from displayio import Group, TileGrid, OnDiskBitmap, Palette
 from keypad import Keys
+from micropython import const
 from random import randint
 import supervisor
 import sys
 import terminalio
+import time
 
 from adafruit_display_text.label import Label
 from adafruit_fruitjam.peripherals import request_display_config
 import adafruit_imageload
 
+import gamepad
+from usb.core import USBError
+
 request_display_config(640, 480)
 display = supervisor.runtime.display
 
-TILE_SIZE = 8
-SCALE = 2 if display.width > 360 else 1
-SCREEN_WIDTH = display.width // SCALE // TILE_SIZE
-SCREEN_HEIGHT = display.height // SCALE // TILE_SIZE
-WINDOW_GAP = 1
-GRID_WIDTH = 10
-GRID_HEIGHT = SCREEN_HEIGHT - WINDOW_GAP * 2 - 2
-TETROMINO_SIZE = 4
-GAME_SPEED_START = 1
-GAME_SPEED_MOD = 0.98  # modifies the game speed when line is cleared
-WINDOW_WIDTH = (SCREEN_WIDTH - GRID_WIDTH - 2) // 2 - WINDOW_GAP * 2
-FONT_HEIGHT = terminalio.FONT.get_bounding_box()[1]
+TILE_SIZE        = const(8)
+SCALE            = 2 if display.width > 360 else 1
+SCREEN_WIDTH     = display.width // SCALE // TILE_SIZE
+SCREEN_HEIGHT    = display.height // SCALE // TILE_SIZE
+WINDOW_GAP       = const(1)
+GRID_WIDTH       = const(10)
+GRID_HEIGHT      = SCREEN_HEIGHT - WINDOW_GAP * 2 - 2
+TETROMINO_SIZE   = const(4)
+GAME_SPEED_START = const(1)
+GAME_SPEED_MOD   = 0.98  # modifies the game speed when line is cleared
+WINDOW_WIDTH     = (SCREEN_WIDTH - GRID_WIDTH - 2) // 2 - WINDOW_GAP * 2
+FONT_HEIGHT      = terminalio.FONT.get_bounding_box()[1]
 
 TETROMINOS = [
     {
@@ -627,6 +632,81 @@ async def tetromino_handler() -> None:
 
 buttons = Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
 
+ACTION_ROTATE    = const(0)
+ACTION_LEFT      = const(1)
+ACTION_RIGHT     = const(2)
+ACTION_SOFT_DROP = const(3)
+ACTION_HARD_DROP = const(4)
+ACTION_QUIT      = const(5)
+
+def do_action(action:int) -> None:
+    global current_tetromino, last_down_time
+    if current_tetromino is not None:
+        if action == ACTION_ROTATE:
+            current_tetromino.rotate_right()
+        elif action == ACTION_LEFT:
+            current_tetromino.left()
+        elif action == ACTION_RIGHT:
+            current_tetromino.right()
+        elif action == ACTION_SOFT_DROP:
+            if current_tetromino.down():
+                last_down_time = time.monotonic()
+        elif action == ACTION_HARD_DROP:
+            spaces = 0
+            while current_tetromino.down():
+                spaces += 1
+            score_window.score += spaces
+            if spaces:
+                last_down_time = time.monotonic()
+    if action == ACTION_QUIT:
+        supervisor.reload()
+
+gamepad_map = (
+    (gamepad.A,     ACTION_ROTATE),
+    (gamepad.B,     ACTION_HARD_DROP),
+    (gamepad.DOWN,  ACTION_SOFT_DROP),
+    (gamepad.START, ACTION_QUIT),
+    (gamepad.LEFT,  ACTION_LEFT),
+    (gamepad.RIGHT, ACTION_RIGHT),
+)
+
+async def gamepad_handler() -> None:
+    while True:
+        try:
+            scan_result = gamepad.find_usb_device()
+            if scan_result is None:
+                await asyncio.sleep(.4)
+                continue
+            device = gamepad.InputDevice(scan_result)
+
+            prev = 0
+            for data in device.input_event_generator():
+                if data is not None and isinstance(data, int):
+                    diff = prev ^ data
+                    prev = data
+                    for button, action in gamepad_map:
+                        if diff & button and data & button:
+                            do_action(action)
+                await asyncio.sleep(1/30)
+
+        except (USBError, ValueError) as e:
+            await asyncio.sleep(.4)
+
+key_map = (
+    ((" ", "\n"),     ACTION_ROTATE),
+    (("w", "\x1b[a"), ACTION_HARD_DROP),
+    (("a", "\x1b[d"), ACTION_LEFT),
+    (("d", "\x1b[c"), ACTION_RIGHT),
+    (("s", "\x1b[b"), ACTION_SOFT_DROP),
+    (("q",),          ACTION_QUIT),
+)
+
+button_map = (
+    ACTION_SOFT_DROP,  # button #1
+    ACTION_ROTATE,     # button #2
+    ACTION_QUIT,       # button #3
+)
+
 async def input_handler() -> None:
     global current_tetromino, buttons
 
@@ -635,55 +715,22 @@ async def input_handler() -> None:
         # check if any keys were pressed
         if available := supervisor.runtime.serial_bytes_available:
             key = sys.stdin.read(available).lower()
-
-            if current_tetromino is not None:
-                # action
-                if key == " " or key == "\n":
-                    current_tetromino.rotate_right()
-
-                # up (hard drop)
-                if key == "w" or key == "\x1b[a":
-                    spaces = 0
-                    while current_tetromino.down():
-                        spaces += 1
-                    score_window.score += spaces
-                
-                # left
-                if key == "a" or key == "\x1b[d":
-                    current_tetromino.left()
-                
-                # right
-                if key == "d" or key == "\x1b[c":
-                    current_tetromino.right()
-
-                # down (soft drop)
-                if key == "s" or key == "\x1b[b":
-                    current_tetromino.down()
-
-            if key == "q":
-                supervisor.reload()
+            for keys, action in key_map:
+                if key in keys:
+                    do_action(action)
+                    break
 
         # check hardware buttons
         if (event := buttons.events.get()) and event.pressed:
-            if current_tetromino is not None:
-                # button #1
-                if event.key_number == 0:
-                    current_tetromino.down()
-                
-                # button #2
-                if event.key_number == 1:
-                    current_tetromino.rotate_right()
-            
-            # button #3
-            if event.key_number == 2:
-                supervisor.reload()
+            do_action(button_map[event.key_number])
 
         await asyncio.sleep(1/30)
 
 async def main():
     await asyncio.gather(
         asyncio.create_task(tetromino_handler()),
-        asyncio.create_task(input_handler())
+        asyncio.create_task(input_handler()),
+        asyncio.create_task(gamepad_handler())
     )
 
 # initial display refresh
