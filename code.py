@@ -567,59 +567,63 @@ def get_next_tetromino() -> None:
 
     next_tetromino.tetromino_index = get_random_tetromino_index()
 
-def update_tetromino() -> None:
-    global current_tetromino, current_lines, game_speed, tilegrid, score_window
-    
-    # generate new tetromino
-    if current_tetromino is None:
-        get_next_tetromino()
-        if face_tg[0, 0] > 2:
-            face_tg[0, 0] = 0  # reset face
-    elif current_tetromino.check_collide(y=1):  # place if collided
-        current_tetromino.place()
-        grid_container.remove(current_tetromino)
-
-        # check for line clearing
-        lines = 0
-        for y in range(max(current_tetromino.tile_y, 0), min(current_tetromino.tile_y + TETROMINO_SIZE, GRID_HEIGHT)):
-            cleared = True
-            for x in range(GRID_WIDTH):
-                if not tilegrid[x, y]:
-                    cleared = False
-                    break
-            if cleared:
-                lines += 1
-                # move tiles down (clears current line)
-                for i in range(y, 1, -1):
-                    for x in range(GRID_WIDTH):
-                        tilegrid[x, i] = tilegrid[x, i - 1]
-                
-                # clear top line
-                for x in range(GRID_WIDTH):
-                    tilegrid[x, 0] = 0
-        
-        if lines:
-            game_speed *= GAME_SPEED_MOD
-            add_lines(lines)
-
-        # check if final move
-        if current_tetromino.tile_y <= 0 and not lines:
-            reset_game()  # TODO: game over
-        else:  # update face
-            face_tg[0, 0] = ((GRID_HEIGHT - current_tetromino.tile_y) * 3) // GRID_HEIGHT
-        
-        # reset old tetromino
-        del current_tetromino
-        current_tetromino = None
-
-    else:  # move tetromino down
-        current_tetromino.tile_y += 1
-
+last_down_time = None
 async def tetromino_handler() -> None:
-    global game_speed
+    global current_tetromino, current_lines, game_speed, tilegrid, score_window, last_down_time
     while True:
-        update_tetromino()
-        await asyncio.sleep(game_speed)
+        since_last_down = 0
+
+        # generate new tetromino
+        if current_tetromino is None:
+            get_next_tetromino()
+            if face_tg[0, 0] > 2:
+                face_tg[0, 0] = 0  # reset face
+        else:
+            since_last_down = time.monotonic() - last_down_time if last_down_time is not None else 0
+            if since_last_down >= game_speed:
+                since_last_down = 0
+            if not since_last_down:
+                if current_tetromino.check_collide(y=1):  # place if collided
+                    current_tetromino.place()
+                    grid_container.remove(current_tetromino)
+
+                    # check for line clearing
+                    lines = 0
+                    for y in range(max(current_tetromino.tile_y, 0), min(current_tetromino.tile_y + TETROMINO_SIZE, GRID_HEIGHT)):
+                        cleared = True
+                        for x in range(GRID_WIDTH):
+                            if not tilegrid[x, y]:
+                                cleared = False
+                                break
+                        if cleared:
+                            lines += 1
+                            # move tiles down (clears current line)
+                            for i in range(y, 1, -1):
+                                for x in range(GRID_WIDTH):
+                                    tilegrid[x, i] = tilegrid[x, i - 1]
+                            
+                            # clear top line
+                            for x in range(GRID_WIDTH):
+                                tilegrid[x, 0] = 0
+                    
+                    if lines:
+                        game_speed *= GAME_SPEED_MOD
+                        add_lines(lines)
+
+                    # check if final move
+                    if current_tetromino.tile_y <= 0 and not lines:
+                        reset_game()  # TODO: game over
+                    else:  # update face
+                        face_tg[0, 0] = ((GRID_HEIGHT - current_tetromino.tile_y) * 3) // GRID_HEIGHT
+                    
+                    # reset old tetromino
+                    del current_tetromino
+                    current_tetromino = None
+
+                else:  # move tetromino down
+                    current_tetromino.tile_y += 1
+        
+        await asyncio.sleep(game_speed - since_last_down)
 
 buttons = Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
 
