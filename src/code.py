@@ -700,7 +700,7 @@ async def game_over() -> None:
 
     # clear out area for text
     for y in range(GRID_HEIGHT // 2 - 2, GRID_HEIGHT // 2 + 2):
-        for x in range(1, GRID_WIDTH - 1):
+        for x in range(SCALE - 1, GRID_WIDTH - (SCALE - 1)):
             tilegrid[x, y] = 0
     display.refresh()
 
