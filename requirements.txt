@@ -1,6 +1,6 @@
-adafruit_display_text
-adafruit_fruitjam
-adafruit_hid
-adafruit_imageload
+adafruit-circuitpython-display-text
+adafruit-circuitpython-fruitjam
+adafruit-circuitpython-hid
+adafruit-circuitpython-imageload
 asyncio
 neopixel
