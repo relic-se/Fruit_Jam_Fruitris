@@ -139,7 +139,14 @@ window_palette.make_transparent(2)
 
 # load tetromino tiles
 tiles, tiles_palette = adafruit_imageload.load("bitmaps/tetromino.bmp")
-tiles_palette.make_transparent(27)
+tiles_palette.make_transparent(28)
+
+# create separate palette to only show tile borders
+tiles_border_palette = copy_palette(tiles_palette)
+tiles_border_indexes = (1, 11, 16, 9, 6, 2, 0, 26)
+for i in range(len(tiles_border_palette)):
+    if i not in tiles_border_indexes:
+        tiles_border_palette.make_transparent(i)
 
 # load face tiles
 face_bmp, face_palette = adafruit_imageload.load("bitmaps/face.bmp")
@@ -325,12 +332,13 @@ def get_random_tetromino_index() -> int:
 
 class Tetromino(TileGroup):
 
-    def __init__(self, index:int=None, offset:bool=True):
+    def __init__(self, index:int=None, offset:bool=True, tile_index:int=None, border_only:bool=False):
         super().__init__()
+        self._tile_index = tile_index
 
         # setup tilegrid
         self._tilegrid = TileGrid(
-            tiles, pixel_shader=tiles_palette,
+            tiles, pixel_shader=tiles_border_palette if border_only else tiles_palette,
             width=TETROMINO_SIZE, height=TETROMINO_SIZE,
             tile_width=TILE_SIZE, tile_height=TILE_SIZE,
         )
@@ -357,6 +365,8 @@ class Tetromino(TileGroup):
     def tetromino_index(self, value:int) -> None:
         self._index = value
         pattern, self._tile = TETROMINOS[value]["pattern"], TETROMINOS[value]["tile"]  # get tetromino data from index
+        if self._tile_index is not None:  # allow override
+            self._tile = self._tile_index
         self.grid = pattern  # update tilegrid
 
     @property
@@ -420,9 +430,11 @@ class Tetromino(TileGroup):
             return True
         return False
 
-    def rotate_right(self, force:bool = False) -> None:
+    def rotate_right(self, force:bool = False) -> bool:
         if self._rotate_right(force):
             self._rotation = (self._rotation + 1) % 4
+            return True
+        return False
 
     def _rotate_right(self, force:bool = False) -> bool:
         # rotate grid into copy
@@ -437,9 +449,11 @@ class Tetromino(TileGroup):
         # check if rotated piece fits or move left or right to fit
         return self._wiggle(grid, force)
 
-    def rotate_left(self, force:bool = False) -> None:
+    def rotate_left(self, force:bool = False) -> bool:
         if self._rotate_left(force):
             self._rotation = (self._rotation - 1) % 4
+            return True
+        return False
      
     def _rotate_left(self, force:bool = False) -> bool:
         # rotate grid into copy
@@ -593,15 +607,34 @@ def set_drink_level(value:float) -> None:
             neopixels[i] = apply_brightness(current_color, (value * neopixels.n) - (neopixels.n - 1 - i))
         neopixels.show()
 
-current_tetromino = None
-def get_next_tetromino() -> None:
-    global current_tetromino, next_tetromino
-    if current_tetromino is not None:
-        grid_container.remove(current_tetromino)
+tetromino, tetromino_indicator = None, None
+def update_tetromino_indicator_y() -> None:
+    tetromino_indicator.tile_y = 0
+    for i in range(GRID_HEIGHT):
+        if tetromino_indicator.check_collide(y=i):
+            tetromino_indicator.tile_y = i - 1
+            tetromino_indicator.hidden = False
+            return
+    tetromino_indicator.hidden = True
 
-    current_tetromino = Tetromino(next_tetromino.tetromino_index)
-    current_tetromino.tile_x = (GRID_WIDTH - TETROMINO_SIZE) // 2  # center along x axis of grid
-    grid_container.append(current_tetromino)
+def get_next_tetromino() -> None:
+    global tetromino, tetromino_indicator, next_tetromino
+    if tetromino is not None:
+        grid_container.remove(tetromino)
+        del tetromino
+    if tetromino_indicator is not None:
+        grid_container.remove(tetromino_indicator)
+        del tetromino_indicator
+
+    tetromino = Tetromino(next_tetromino.tetromino_index)
+    tetromino.tile_x = (GRID_WIDTH - TETROMINO_SIZE) // 2  # center along x axis of grid
+    grid_container.append(tetromino)
+
+    tetromino_indicator = Tetromino(tetromino.tetromino_index, offset=False, border_only=True)
+    tetromino_indicator.tile_x = tetromino.tile_x
+    update_tetromino_indicator_y()
+    
+    grid_container.append(tetromino_indicator)
 
     next_tetromino.tetromino_index = get_random_tetromino_index()
 
@@ -659,7 +692,7 @@ def add_lines(lines:int) -> None:
 
 last_drop_time = None
 async def tetromino_handler() -> None:
-    global current_tetromino, current_lines, tilegrid, score_window, last_drop_time
+    global tetromino, current_lines, tilegrid, score_window, last_drop_time
     while True:
 
         # Synchronize with last manual drop
@@ -668,12 +701,13 @@ async def tetromino_handler() -> None:
             last_drop_time = None
             await asyncio.sleep(sync_drop_time)
             
-        if current_tetromino.check_collide(y=1):  # place if collided
-            current_tetromino.place()
+        if tetromino.check_collide(y=1):  # place if collided
+            tetromino.place()
+            tetromino_indicator.hidden = True
 
             # check for line clearing
             lines = 0
-            for y in range(max(current_tetromino.tile_y, 0), min(current_tetromino.tile_y + TETROMINO_SIZE, GRID_HEIGHT)):
+            for y in range(max(tetromino.tile_y, 0), min(tetromino.tile_y + TETROMINO_SIZE, GRID_HEIGHT)):
                 cleared = True
                 for x in range(GRID_WIDTH):
                     if not tilegrid[x, y]:
@@ -694,16 +728,16 @@ async def tetromino_handler() -> None:
             add_lines(lines)
 
             # check if final move
-            if current_tetromino.tile_y <= 0 and not lines:
+            if tetromino.tile_y <= 0 and not lines:
                 reset_game()  # TODO: game over
             else:  # update face
-                face_tg[0, 0] = ((GRID_HEIGHT - current_tetromino.tile_y) * 3) // GRID_HEIGHT
+                face_tg[0, 0] = ((GRID_HEIGHT - tetromino.tile_y) * 3) // GRID_HEIGHT
 
             # generate new tetromino
             get_next_tetromino()
 
         else:  # move tetromino down
-            current_tetromino.tile_y += 1
+            tetromino.tile_y += 1
 
         display.refresh()
         
@@ -717,19 +751,26 @@ ACTION_HARD_DROP = const(4)
 ACTION_QUIT      = const(5)
 
 def do_action(action:int) -> None:
-    global current_tetromino, last_drop_time
+    global tetromino, last_drop_time
     if action == ACTION_ROTATE:
-        current_tetromino.rotate_right()
+        if tetromino.rotate_right():
+            tetromino_indicator.rotate_right(True)
+            tetromino_indicator.tile_x = tetromino.tile_x
+            update_tetromino_indicator_y()
     elif action == ACTION_LEFT:
-        current_tetromino.left()
+        if tetromino.left():
+            tetromino_indicator.tile_x = tetromino.tile_x
+            update_tetromino_indicator_y()
     elif action == ACTION_RIGHT:
-        current_tetromino.right()
+        if tetromino.right():
+            tetromino_indicator.tile_x = tetromino.tile_x
+            update_tetromino_indicator_y()
     elif action == ACTION_SOFT_DROP:
-        if current_tetromino.down():
+        if tetromino.down():
             last_drop_time = time.monotonic()
     elif action == ACTION_HARD_DROP:
         spaces = 0
-        while current_tetromino.down():
+        while tetromino.down():
             spaces += 1
         score_window.score += spaces
         if spaces:
@@ -778,7 +819,7 @@ button_map = (
 )
 
 async def button_handler() -> None:
-    global current_tetromino, buttons
+    global tetromino, buttons
 
     while True:
 
