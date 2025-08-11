@@ -1,0 +1,3 @@
+Adafruit CircuitPython 10.0.0-beta.2 on 2025-08-04; Adafruit Fruit Jam with rp2350b
+Board ID:adafruit_fruit_jam
+UID:
