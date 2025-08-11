@@ -152,7 +152,6 @@ drink_map = tuple([(x, drink_bmp.pixel_shader[x]) for x in drink_map])  # copy c
 for i, color in drink_map:
     drink_bmp.pixel_shader[i] = 0x000000
 
-
 # starting neopixels
 if NEOPIXELS:
     for i in range(neopixels.n):
@@ -523,14 +522,15 @@ main_group.append(title_tg)
 # next tetromino container
 tetromino_window = Window(
     text="Next",
-    height=4,
+    height=6,
     x=grid_window.tile_x + grid_window.tile_width + WINDOW_GAP,
     y=grid_window.tile_y,
 )
 main_group.append(tetromino_window)
 
 next_tetromino = Tetromino(offset=False)
-next_tetromino.tile_x = WINDOW_WIDTH - TETROMINO_SIZE - 1
+next_tetromino.tile_x = (WINDOW_WIDTH - TETROMINO_SIZE) // 2
+next_tetromino.tile_y = 1
 next_tetromino.rotate_left(True)
 tetromino_window.append(next_tetromino)
 
@@ -545,7 +545,7 @@ main_group.append(score_window)
 # face
 face_window = Window(
     background_color=0xd0d0d0,
-    height=6,
+    height=8,
     x=score_window.tile_x,
 )
 face_window.tile_y = grid_window.tile_y + grid_window.tile_height - face_window.tile_height
