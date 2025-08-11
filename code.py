@@ -216,22 +216,26 @@ class NumberWindow(Window):
             height=(FONT_HEIGHT * len(label)) // TILE_SIZE + 2 if height is None else height,
             **args
         )
-        self._value = Label(terminalio.FONT, color=0xffffff)
-        self._value.anchor_point = (1, 0)
-        self._value.anchored_position = (self.width - TILE_SIZE - 1, TILE_SIZE - 1)
+        self._values = []
+        for i in range(len(label)):
+            value_label = Label(terminalio.FONT, color=0xffffff)
+            value_label.anchor_point = (1, 0)
+            value_label.anchored_position = (self.width - TILE_SIZE - 1, TILE_SIZE - 1 + i * FONT_HEIGHT)
+            self._values.append(value_label)
+            self.append(value_label)
         self.value = value
-        self.append(self._value)
 
     @property
     def value(self) -> int|tuple:
-        value = tuple([int(x) for x in self._value.text.split("\n")])
+        value = tuple([int(x.text) for x in self._values])
         return value[0] if len(value) == 1 else value
     
     @value.setter
     def value(self, value:int|tuple) -> None:
         if type(value) is not tuple:
             value = (value,)
-        self._value.text = "\n".join([str(x) for x in value])
+        for i, label in enumerate(self._values):
+            label.text = str(value[i  % len(value)])
     
 class ScoreWindow(NumberWindow):
     
@@ -243,21 +247,21 @@ class ScoreWindow(NumberWindow):
         )
 
     @property
-    def score(self) -> int:
-        return self.value[0]
-    
-    @score.setter
-    def score(self, value:int) -> None:
-        current = self.value[0]
-        self.value = (value if value > current else current, value)
-
-    @property
     def high_score(self) -> int:
         return self.value[0]
     
     @high_score.setter
     def high_score(self, value:int) -> None:
-        self.value = (value, self.value[1])
+        self.value = (value, self.score)
+
+    @property
+    def score(self) -> int:
+        return self.value[1]
+    
+    @score.setter
+    def score(self, value:int) -> None:
+        current = self.high_score
+        self.value = (value if value > current else current, value)
 
 def get_random_tetromino_index() -> int:
     return randint(0, len(TETROMINOS) - 1)
@@ -469,6 +473,7 @@ tetromino_window.append(next_tetromino)
 
 # high score container
 score_window = ScoreWindow(
+    high_score=10000,
     x=tetromino_window.tile_x,
     y=grid_window.tile_y + tetromino_window.tile_height + WINDOW_GAP,
 )
