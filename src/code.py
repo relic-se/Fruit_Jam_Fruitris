@@ -15,7 +15,6 @@ import time
 from adafruit_display_text.label import Label
 from adafruit_fruitjam.peripherals import request_display_config
 import adafruit_imageload
-from neopixel import NeoPixel
 
 import gamepad
 from usb.core import USBError
@@ -35,6 +34,7 @@ GAME_SPEED_START = const(1)
 GAME_SPEED_MOD   = 0.98  # modifies the game speed when line is cleared
 WINDOW_WIDTH     = (SCREEN_WIDTH - GRID_WIDTH - 2) // 2 - WINDOW_GAP * 2
 FONT_HEIGHT      = terminalio.FONT.get_bounding_box()[1]
+NEOPIXELS        = False
 
 TETROMINOS = [
     {
@@ -104,7 +104,9 @@ TETROMINOS = [
 
 # configure hardware
 buttons = Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
-neopixels = NeoPixel(board.NEOPIXEL, 5)
+if NEOPIXELS:
+    from neopixel import NeoPixel
+    neopixels = NeoPixel(board.NEOPIXEL, 5)
 
 def copy_palette(palette:Palette) -> Palette:
     clone = Palette(len(palette))
@@ -148,9 +150,10 @@ drink_map = (12, 3, 5, 4, 1, 10, 14, 9, 7, 6, 8)  # convert level index to palet
 drink_map = tuple([(x, drink_bmp.pixel_shader[x]) for x in drink_map])  # copy colors
 
 # starting neopixels
-for i in range(neopixels.n):
-    neopixels[i] = drink_map[neopixels.n - 1 - i][1]
-neopixels.show()
+if NEOPIXELS:
+    for i in range(neopixels.n):
+        neopixels[i] = drink_map[neopixels.n - 1 - i][1]
+    neopixels.show()
 
 class TileGroup(Group):
 
@@ -572,9 +575,10 @@ def set_drink_level(value:float) -> None:
         drink_tg.pixel_shader[color[0]] = current_color if drink_value >= i else 0x000000
     
     # set neopixel level
-    for i in range(neopixels.n):
-        neopixels[i] = apply_brightness(current_color, (value * neopixels.n) - (neopixels.n - 1 - i))
-    neopixels.show()
+    if NEOPIXELS:
+        for i in range(neopixels.n):
+            neopixels[i] = apply_brightness(current_color, (value * neopixels.n) - (neopixels.n - 1 - i))
+        neopixels.show()
 
 current_tetromino = None
 def get_next_tetromino() -> None:
