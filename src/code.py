@@ -560,7 +560,7 @@ def get_next_tetromino() -> None:
 
     next_tetromino.tetromino_index = get_random_tetromino_index()
 
-def reset_game() -> None:
+def reset_game(game_over:bool = True) -> None:
     global current_lines, level_window, tilegrid, score_window
 
     # generate new tetromino
@@ -572,14 +572,14 @@ def reset_game() -> None:
             tilegrid[x, y] = 0
 
     # update face
-    face_tg[0, 0] = (face_bmp.width // face_tg.tile_width) - 1
+    face_tg[0, 0] = (face_bmp.width // face_tg.tile_width) - 1 if game_over else 0
 
     # reset game variables
     score_window.reset()
     level_window.value = 1
     current_lines = 0
     set_drink_level(0)
-reset_game()
+reset_game(False)
 
 def get_lines_per_level() -> int:
     global level_window
