@@ -113,6 +113,8 @@ def copy_palette(palette:Palette) -> Palette:
 
 # load background tiles
 bg_tiles, bg_palette = adafruit_imageload.load("bitmaps/bg.bmp")
+bg_palette[0] = 0x030060
+bg_palette[1] = 0x442a92
 
 # load window border tiles
 window_tiles, window_palette = adafruit_imageload.load("bitmaps/window.bmp")
@@ -414,10 +416,6 @@ text_group = Group()
 main_group = Group(scale=SCALE)
 text_group.append(main_group)
 display.root_group = text_group
-
-# setup background color palette
-bg_palette[0] = 0x030060
-bg_palette[1] = 0x442a92
 
 # use terminalio font as tile sheet to write to background
 bg_grid = TileGrid(
