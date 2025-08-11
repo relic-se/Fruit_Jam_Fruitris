@@ -21,6 +21,7 @@ from usb.core import USBError
 
 request_display_config(640, 480)
 display = supervisor.runtime.display
+display.auto_refresh = False
 
 TILE_SIZE        = const(8)
 SCALE            = 2 if display.width > 360 else 1
@@ -703,6 +704,8 @@ async def tetromino_handler() -> None:
 
         else:  # move tetromino down
             current_tetromino.tile_y += 1
+
+        display.refresh()
         
         await asyncio.sleep(get_drop_speed())
 
@@ -733,6 +736,8 @@ def do_action(action:int) -> None:
             last_drop_time = time.monotonic()
     elif action == ACTION_QUIT:
         supervisor.reload()
+    
+    display.refresh()
 
 gamepad_map = (
     (gamepad.A,     ACTION_ROTATE),
@@ -791,6 +796,6 @@ async def main():
     )
 
 # initial display refresh
-display.refresh(target_frames_per_second=30)
+display.refresh()
 
 asyncio.run(main())
