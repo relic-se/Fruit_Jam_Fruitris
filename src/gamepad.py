@@ -24,7 +24,7 @@ from usb.util import SPEED_HIGH
 
 from adafruit_hid.keycode import Keycode
 
-import src.usb_descriptor as usb_descriptor
+import usb_descriptor
 
 
 # Gamepad button bitmask constants
