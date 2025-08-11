@@ -402,6 +402,21 @@ class Tetromino(TileGroup):
                 if self._tilegrid[x, y] and 0 <= grid_x < GRID_WIDTH and 0 <= grid_y < GRID_HEIGHT:
                     tilegrid[grid_x, grid_y] = self._tilegrid[x, y]
 
+    def _wiggle(self, grid:list, force:bool = False) -> bool:
+        # check if rotated piece fits
+        collided = not force and self.check_collide(grid)
+        if collided and not self.check_collide(grid, x=-1):  # move left if fits
+            collided = False
+            self.tile_x -= 1
+        elif collided and not self.check_collide(grid, x=1):  # move right if fits
+            collided = False
+            self.tile_x += 1
+        
+        if not collided:
+            self._grid(grid)  # update grid
+            return True
+        return False
+
     def rotate_right(self, force:bool = False) -> None:
         if self._rotate_right(force):
             self._rotation = (self._rotation + 1) % 4
@@ -416,11 +431,8 @@ class Tetromino(TileGroup):
             for y in range(TETROMINO_SIZE)
         ]
 
-        # check if rotated piece fits
-        if force or not self.check_collide(grid):
-            self._grid(grid)  # update grid
-            return True
-        return False
+        # check if rotated piece fits or move left or right to fit
+        return self._wiggle(grid, force)
 
     def rotate_left(self, force:bool = False) -> None:
         if self._rotate_left(force):
@@ -435,12 +447,9 @@ class Tetromino(TileGroup):
             ]
             for y in range(TETROMINO_SIZE)
         ]
-
-        # check if rotated piece fits
-        if force or not self.check_collide(grid):
-            self._grid(grid)  # update grid
-            return True
-        return False
+        
+        # check if rotated piece fits or move left or right to fit
+        return self._wiggle(grid, force)
     
     def move(self, x:int=0, y:int=0) -> bool:
         if self.check_collide(x=x, y=y):
