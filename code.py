@@ -548,10 +548,10 @@ def add_lines(lines:int) -> None:
     score_window.score += (40, 100, 300, 1200)[lines - 1] * level_window.value
     current_lines += lines
     total_lines = get_lines_per_level()
-    set_drink_level(current_lines / total_lines)
     if current_lines > total_lines:
         level_window.value += 1
         current_lines = 0
+    set_drink_level(current_lines / total_lines)
 
 def get_next_tetromino() -> None:
     global current_tetromino, next_tetromino
@@ -628,9 +628,16 @@ async def input_handler() -> None:
             key = sys.stdin.read(available).lower()
 
             if current_tetromino is not None:
-                # up
-                if key == "w" or key == "\x1b[a" or key == " " or key == "\n":
+                # action
+                if key == " " or key == "\n":
                     current_tetromino.rotate_right()
+
+                # up (hard drop)
+                if key == "w" or key == "\x1b[a":
+                    spaces = 0
+                    while current_tetromino.down():
+                        spaces += 1
+                    score_window.score += spaces
                 
                 # left
                 if key == "a" or key == "\x1b[d":
@@ -640,7 +647,7 @@ async def input_handler() -> None:
                 if key == "d" or key == "\x1b[c":
                     current_tetromino.right()
 
-                # down
+                # down (soft drop)
                 if key == "s" or key == "\x1b[b":
                     current_tetromino.down()
 
