@@ -137,9 +137,9 @@ class InputDevice:
         self.device = device
         self.dev_type = dev_type
         # Make sure CircuitPython core is not claiming the device
-        interface = 0
-        if device.is_kernel_driver_active(interface):
-            device.detach_kernel_driver(interface)
+        self.interface = 0
+        if device.is_kernel_driver_active(self.interface):
+            device.detach_kernel_driver(self.interface)
         # Set configuration
         device.set_configuration()
         # Figure out which endpoints to use

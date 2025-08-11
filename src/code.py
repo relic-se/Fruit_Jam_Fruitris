@@ -800,8 +800,19 @@ ACTION_SOFT_DROP = const(3)
 ACTION_HARD_DROP = const(4)
 ACTION_QUIT      = const(5)
 
+gamepad_map = (
+    (gamepad.A,     ACTION_ROTATE),
+    (gamepad.B,     ACTION_HARD_DROP),
+    (gamepad.DOWN,  ACTION_SOFT_DROP),
+    (gamepad.START, ACTION_QUIT),
+    (gamepad.LEFT,  ACTION_LEFT),
+    (gamepad.RIGHT, ACTION_RIGHT),
+    (gamepad.UP,    ACTION_ROTATE),
+)
+gamepad_device = None
+
 def do_action(action:int) -> None:
-    global tetromino, last_drop_time, game_state
+    global tetromino, last_drop_time, game_state, gamepad_device
     if game_state == STATE_PLAYING:
         if action == ACTION_ROTATE:
             if tetromino.rotate_right():
@@ -829,31 +840,24 @@ def do_action(action:int) -> None:
     elif game_state == STATE_WAITING and action != ACTION_QUIT:
         reset_game()
     if action == ACTION_QUIT:
+        if gamepad_device is not None and not gamepad_device.device.is_kernel_driver_active(gamepad_device.interface):
+            gamepad_device.device.attach_kernel_driver(gamepad_device.interface)
         supervisor.reload()
     
     display.refresh()
 
-gamepad_map = (
-    (gamepad.A,     ACTION_ROTATE),
-    (gamepad.B,     ACTION_HARD_DROP),
-    (gamepad.DOWN,  ACTION_SOFT_DROP),
-    (gamepad.START, ACTION_QUIT),
-    (gamepad.LEFT,  ACTION_LEFT),
-    (gamepad.RIGHT, ACTION_RIGHT),
-    (gamepad.UP,    ACTION_ROTATE),
-)
-
 async def gamepad_handler() -> None:
+    global gamepad_device, gamepad_map
     while True:
         try:
             scan_result = gamepad.find_usb_device()
             if scan_result is None:
                 await asyncio.sleep(.4)
                 continue
-            device = gamepad.InputDevice(scan_result)
+            gamepad_device = gamepad.InputDevice(scan_result)
 
             prev = 0
-            for data in device.input_event_generator():
+            for data in gamepad_device.input_event_generator():
                 if data is not None and isinstance(data, int):
                     diff = prev ^ data
                     prev = data
