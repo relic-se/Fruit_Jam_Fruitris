@@ -526,6 +526,8 @@ def set_drink_level(value:float) -> None:
 current_tetromino = None
 def get_next_tetromino() -> None:
     global current_tetromino, next_tetromino
+    if current_tetromino is not None:
+        grid_container.remove(current_tetromino)
 
     current_tetromino = Tetromino(next_tetromino.tetromino_index)
     current_tetromino.tile_x = (GRID_WIDTH - TETROMINO_SIZE) // 2  # center along x axis of grid
@@ -598,7 +600,6 @@ async def tetromino_handler() -> None:
             
         if current_tetromino.check_collide(y=1):  # place if collided
             current_tetromino.place()
-            grid_container.remove(current_tetromino)
 
             # check for line clearing
             lines = 0
