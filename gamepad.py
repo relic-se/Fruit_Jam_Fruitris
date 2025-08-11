@@ -43,11 +43,8 @@ TYPE_SWITCH_PRO    = const(1)  # 057e:2009 clones of Switch Pro Controller
 TYPE_ADAFRUIT_SNES = const(2)  # 081f:e401 generic SNES layout HID, low-speed
 TYPE_8BITDO_ZERO2  = const(3)  # 2dc8:9018 mini SNES layout, HID over USB-C
 TYPE_XINPUT        = const(4)  # (vid:pid vary) Clones of Xbox360 controller
-TYPE_BOOT_MOUSE    = const(5)
-TYPE_BOOT_KEYBOARD = const(6)
-TYPE_HID_COMPOSITE = const(7)
-TYPE_HID           = const(8)
-TYPE_POWERA_WIRED  = const(9)  # 20d6:a711 PowerA Wired Controller (for Switch)
+TYPE_BOOT_KEYBOARD = const(5)
+TYPE_POWERA_WIRED  = const(6)  # 20d6:a711 PowerA Wired Controller (for Switch)
 
 
 device_cache = {}
@@ -88,14 +85,8 @@ def find_usb_device():
                 return ScanResult(dev, TYPE_POWERA_WIRED, 'PowerAWired', desc)
             elif dev_int0_info == (0xff, 0xff, 0xff, 0xff, 0x5d, 0x01):
                 return ScanResult(dev, TYPE_XINPUT, 'XInput', desc)
-            elif dev_int0_info == (0x00, 0x00, 0x00, 0x03, 0x00, 0x00):
-                return ScanResult(dev, TYPE_HID_COMPOSITE, 'HIDComposite', desc)
             elif dev_int0_info == (0x00, 0x00, 0x00, 0x03, 0x01, 0x01):
                 return ScanResult(dev, TYPE_BOOT_KEYBOARD, 'BootKeyboard', desc)
-            elif dev_int0_info == (0x00, 0x00, 0x00, 0x03, 0x01, 0x02):
-                return ScanResult(dev, TYPE_BOOT_MOUSE, 'BootMouse', desc)
-            elif int0_info == (0x03, 0x00, 0x00):
-                return ScanResult(dev, TYPE_HID, 'HID', desc)
             else:
                 return None
         except (ValueError, USBError) as e:
@@ -166,14 +157,8 @@ class InputDevice:
             print('Initializing PowerA Wired Controller')
         elif dev_type == TYPE_XINPUT:
             self.init_xinput()
-        elif dev_type == TYPE_BOOT_MOUSE:
-            print('Initializing Boot-Compatible Mouse')
         elif dev_type == TYPE_BOOT_KEYBOARD:
             print('Initializing Boot-Compatible Keyboard')
-        elif dev_type == TYPE_HID_COMPOSITE:
-            print('Initializing HID composite device')
-        elif dev_type == TYPE_HID:
-            print('Initializing HID device')
         else:
             raise ValueError('Unknown dev_type: %d' % dev_type)
 
@@ -430,13 +415,7 @@ class InputDevice:
                     yield None if d is None else ((d[1] << 8) | d[0])
             # Filter lambda trims off all the analog stuff
             return normalize_xinput(int0_gen(filter_fn=lambda d: d[2:4]))
-        elif dev_type == TYPE_BOOT_MOUSE:
-            return int0_gen()
         elif dev_type == TYPE_BOOT_KEYBOARD:
-            return int0_gen()
-        elif dev_type == TYPE_HID_COMPOSITE:
-            return int0_gen()
-        elif dev_type == TYPE_HID:
             return int0_gen()
 
     def int0_read_generator(self, filter_fn=lambda d: d):
