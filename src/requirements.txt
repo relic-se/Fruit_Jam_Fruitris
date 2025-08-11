@@ -1,0 +1,6 @@
+adafruit-circuitpython-display-text
+adafruit-circuitpython-fruitjam
+adafruit-circuitpython-hid
+adafruit-circuitpython-imageload
+asyncio
+neopixel
