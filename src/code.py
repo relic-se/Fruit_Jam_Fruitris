@@ -273,7 +273,7 @@ class ScoreWindow(NumberWindow):
     
     def __init__(self, high_score:int=0, **args):
         super().__init__(
-            label=("High" + " Score" if SCALE - 1 else "", "Score"),
+            label=("High" + (" Score" if SCALE - 1 else ""), "Score"),
             value=(high_score, 0),
             **args
         )
