@@ -6,6 +6,7 @@ import board
 from displayio import Group, TileGrid, OnDiskBitmap, Palette
 from keypad import Keys
 from micropython import const
+import os
 from random import randint
 import supervisor
 import sys
@@ -252,6 +253,7 @@ class ScoreWindow(NumberWindow):
             value=(high_score, 0),
             **args
         )
+        self._read_save()
 
     @property
     def high_score(self) -> int:
@@ -269,6 +271,30 @@ class ScoreWindow(NumberWindow):
     def score(self, value:int) -> None:
         current = self.high_score
         self.value = (value if value > current else current, value)
+
+    def reset(self) -> None:
+        if self.score >= self.high_score:
+            self._update_save()
+        self.score = 0
+    
+    def _read_save(self) -> None:
+        try:
+            with open("/saves/fruitris.txt", "rt") as f:
+                saved_score = int(f.readline())
+                if saved_score > self.high_score:
+                    self.high_score = saved_score
+        except OSError:
+            pass
+        except ValueError:
+            os.remove("/saves/fruitris.txt")
+        return None
+
+    def _update_save(self) -> None:
+        try:
+            with open("/saves/fruitris.txt", "wt") as f:
+                f.write(str(self.high_score))
+        except OSError:
+            pass
 
 def get_random_tetromino_index() -> int:
     return randint(0, len(TETROMINOS) - 1)
@@ -550,7 +576,7 @@ def reset_game() -> None:
     face_tg[0, 0] = (face_bmp.width // face_tg.tile_width) - 1
 
     # reset game variables
-    score_window.score = 0
+    score_window.reset()
     level_window.value = 1
     current_lines = 0
     set_drink_level(0)
