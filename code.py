@@ -527,7 +527,7 @@ def set_drink_level(value:float) -> None:
 
 current_tetromino = None
 def reset_game() -> None:
-    global current_tetromino, current_lines, level_window, tilegrid, game_speed, score_window
+    global current_tetromino, current_lines, level_window, tilegrid, score_window
 
     # reset old tetromino
     del current_tetromino
@@ -542,7 +542,6 @@ def reset_game() -> None:
     face_tg[0, 0] = (face_bmp.width // face_tg.tile_width) - 1
 
     # reset game variables
-    game_speed = GAME_SPEED_START
     score_window.score = 0
     level_window.value = 1
     current_lines = 0
@@ -553,15 +552,32 @@ def get_lines_per_level() -> int:
     global level_window
     return level_window.value * 10
 
+def get_drop_speed() -> float:
+    global level_window
+    level = level_window.value
+    if level >= 20:
+        return 2 / 60
+    elif level >= 17:
+        return 3 / 60
+    elif level >= 14:
+        return 4 / 60
+    elif level >= 11:
+        return 5 / 60
+    elif level == 10:
+        return 6 / 60
+    else:  # <= 9
+        return (48 - (level_window.value - 1) * 5) / 60
+
 def add_lines(lines:int) -> None:
     global level_window, current_lines
-    score_window.score += (40, 100, 300, 1200)[lines - 1] * level_window.value
-    current_lines += lines
-    total_lines = get_lines_per_level()
-    if current_lines > total_lines:
-        level_window.value += 1
-        current_lines = 0
-    set_drink_level(current_lines / total_lines)
+    if lines:
+        score_window.score += (40, 100, 300, 1200)[lines - 1] * level_window.value
+        current_lines += lines
+        total_lines = get_lines_per_level()
+        if current_lines > total_lines:
+            level_window.value += 1
+            current_lines = 0
+        set_drink_level(current_lines / total_lines)
 
 def get_next_tetromino() -> None:
     global current_tetromino, next_tetromino
@@ -572,11 +588,11 @@ def get_next_tetromino() -> None:
 
     next_tetromino.tetromino_index = get_random_tetromino_index()
 
-last_down_time = None
+last_drop_time = None
 async def tetromino_handler() -> None:
-    global current_tetromino, current_lines, game_speed, tilegrid, score_window, last_down_time
+    global current_tetromino, current_lines, tilegrid, score_window, last_drop_time
     while True:
-        since_last_down = 0
+        since_last_drop = 0
 
         # generate new tetromino
         if current_tetromino is None:
@@ -584,10 +600,10 @@ async def tetromino_handler() -> None:
             if face_tg[0, 0] > 2:
                 face_tg[0, 0] = 0  # reset face
         else:
-            since_last_down = time.monotonic() - last_down_time if last_down_time is not None else 0
-            if since_last_down >= game_speed:
-                since_last_down = 0
-            if not since_last_down:
+            since_last_drop = time.monotonic() - last_drop_time if last_drop_time is not None else 0
+            if since_last_drop >= get_drop_speed():
+                since_last_drop = 0
+            if not since_last_drop:
                 if current_tetromino.check_collide(y=1):  # place if collided
                     current_tetromino.place()
                     grid_container.remove(current_tetromino)
@@ -610,10 +626,9 @@ async def tetromino_handler() -> None:
                             # clear top line
                             for x in range(GRID_WIDTH):
                                 tilegrid[x, 0] = 0
-                    
-                    if lines:
-                        game_speed *= GAME_SPEED_MOD
-                        add_lines(lines)
+
+                    # update score
+                    add_lines(lines)
 
                     # check if final move
                     if current_tetromino.tile_y <= 0 and not lines:
@@ -628,7 +643,7 @@ async def tetromino_handler() -> None:
                 else:  # move tetromino down
                     current_tetromino.tile_y += 1
         
-        await asyncio.sleep(game_speed - since_last_down)
+        await asyncio.sleep(get_drop_speed() - since_last_drop)
 
 buttons = Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
 
@@ -640,7 +655,7 @@ ACTION_HARD_DROP = const(4)
 ACTION_QUIT      = const(5)
 
 def do_action(action:int) -> None:
-    global current_tetromino, last_down_time
+    global current_tetromino, last_drop_time
     if current_tetromino is not None:
         if action == ACTION_ROTATE:
             current_tetromino.rotate_right()
@@ -650,14 +665,14 @@ def do_action(action:int) -> None:
             current_tetromino.right()
         elif action == ACTION_SOFT_DROP:
             if current_tetromino.down():
-                last_down_time = time.monotonic()
+                last_drop_time = time.monotonic()
         elif action == ACTION_HARD_DROP:
             spaces = 0
             while current_tetromino.down():
                 spaces += 1
             score_window.score += spaces
             if spaces:
-                last_down_time = time.monotonic()
+                last_drop_time = time.monotonic()
     if action == ACTION_QUIT:
         supervisor.reload()
 
