@@ -13,3 +13,7 @@ Tetris, _**Fruit Jamified!**_
 | Drop: Soft       | Down Arrow    | Down    | Button #1 |
 | Drop: Hard       | Z             | B       |           |
 | Quit (reload)    | Enter         | Start   | Button #3 |
+
+## Credits
+
+Special thanks to S. Earley (@sammwich96) for helping with the artwork and to Sam Blenny (@samblenny) for assistance with USB host gamepad support!
