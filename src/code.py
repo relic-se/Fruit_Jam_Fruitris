@@ -148,6 +148,9 @@ face_palette.make_transparent(2)
 drink_bmp = OnDiskBitmap("bitmaps/drink.bmp")
 drink_map = (12, 3, 5, 4, 1, 10, 14, 9, 7, 6, 8)  # convert level index to palette index
 drink_map = tuple([(x, drink_bmp.pixel_shader[x]) for x in drink_map])  # copy colors
+for i, color in drink_map:
+    drink_bmp.pixel_shader[i] = 0x000000
+
 
 # starting neopixels
 if NEOPIXELS:
