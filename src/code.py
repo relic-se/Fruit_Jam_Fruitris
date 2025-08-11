@@ -15,6 +15,7 @@ import time
 from adafruit_display_text.label import Label
 from adafruit_fruitjam.peripherals import request_display_config
 import adafruit_imageload
+from neopixel import NeoPixel
 
 import gamepad
 from usb.core import USBError
@@ -101,6 +102,10 @@ TETROMINOS = [
     }
 ]
 
+# configure hardware
+buttons = Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
+neopixels = NeoPixel(board.NEOPIXEL, 5)
+
 def copy_palette(palette:Palette) -> Palette:
     clone = Palette(len(palette))
     for i, color in enumerate(palette):
@@ -110,6 +115,15 @@ def copy_palette(palette:Palette) -> Palette:
         if palette.is_transparent(i):
             clone.make_transparent(i)
     return clone
+
+def apply_brightness(value:int, brightness:float) -> int:
+    for i in range(3):
+        c = (value >> (8 * i)) & 0xff  # extract color component (rgb)
+        c = int(c * brightness)  # apply brightness
+        c = min(max(c, 0x00), 0xff)  # clamp value to acceptable range
+        value &= 0xffffff ^ (0xff << (8 * i))  # remove old component value
+        value |= c << (8 * i)  # insert new component value
+    return value
 
 # load background tiles
 bg_tiles, bg_palette = adafruit_imageload.load("bitmaps/bg.bmp")
@@ -132,6 +146,11 @@ face_palette.make_transparent(2)
 drink_bmp = OnDiskBitmap("bitmaps/drink.bmp")
 drink_map = (12, 3, 5, 4, 1, 10, 14, 9, 7, 6, 8)  # convert level index to palette index
 drink_map = tuple([(x, drink_bmp.pixel_shader[x]) for x in drink_map])  # copy colors
+
+# starting neopixels
+for i in range(neopixels.n):
+    neopixels[i] = drink_map[neopixels.n - 1 - i][1]
+neopixels.show()
 
 class TileGroup(Group):
 
@@ -543,10 +562,19 @@ level_window.append(drink_tg)
 
 def set_drink_level(value:float) -> None:
     global level_window
+
+    # get current level color
     current_color = drink_map[(level_window.value - 1) % len(drink_map)][1]
-    value = int(value * (len(drink_map) - 1))
+
+    # set level in drink bitmap palette using map
+    drink_value = int(value * (len(drink_map) - 1))
     for i, color in enumerate(drink_map):
-        drink_tg.pixel_shader[color[0]] = current_color if value >= i else 0x000000
+        drink_tg.pixel_shader[color[0]] = current_color if drink_value >= i else 0x000000
+    
+    # set neopixel level
+    for i in range(neopixels.n):
+        neopixels[i] = apply_brightness(current_color, (value * neopixels.n) - (neopixels.n - 1 - i))
+    neopixels.show()
 
 current_tetromino = None
 def get_next_tetromino() -> None:
@@ -661,8 +689,6 @@ async def tetromino_handler() -> None:
             current_tetromino.tile_y += 1
         
         await asyncio.sleep(get_drop_speed())
-
-buttons = Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
 
 ACTION_ROTATE    = const(0)
 ACTION_LEFT      = const(1)

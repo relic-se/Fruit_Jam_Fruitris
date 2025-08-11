@@ -3,3 +3,4 @@ adafruit_fruitjam
 adafruit_hid
 adafruit_imageload
 asyncio
+neopixel
