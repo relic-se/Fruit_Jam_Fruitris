@@ -616,7 +616,7 @@ def set_drink_level(value:float) -> None:
 tetromino, tetromino_indicator = None, None
 def update_tetromino_indicator_y() -> None:
     tetromino_indicator.tile_y = 0
-    for i in range(GRID_HEIGHT):
+    for i in range(tetromino.tile_y + 1, GRID_HEIGHT):
         if tetromino_indicator.check_collide(y=i):
             tetromino_indicator.tile_y = i - 1
             tetromino_indicator.hidden = False
