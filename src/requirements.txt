@@ -2,5 +2,7 @@ adafruit-circuitpython-display-text
 adafruit-circuitpython-fruitjam
 adafruit-circuitpython-hid
 adafruit-circuitpython-imageload
+adafruit-circuitpython-tlv320
 asyncio
 neopixel
+relic_waveform

@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: 2025 Cooper Dalrymple (@relic-se)
 #
 # SPDX-License-Identifier: GPLv3
+from audiobusio import I2SOut
+from audiomixer import Mixer
 import asyncio
 import board
 from displayio import Group, TileGrid, OnDiskBitmap, Palette
@@ -9,12 +11,15 @@ from micropython import const
 import os
 from random import randint
 import supervisor
+from synthio import MidiTrack, Envelope
 import terminalio
 import time
 
 from adafruit_display_text.label import Label
 from adafruit_fruitjam.peripherals import request_display_config
 import adafruit_imageload
+from adafruit_tlv320 import TLV320DAC3100
+import relic_waveform
 
 import gamepad
 from usb.core import USBError
@@ -109,6 +114,74 @@ if NEOPIXELS:
     from neopixel import NeoPixel
     neopixels = NeoPixel(board.NEOPIXEL, 5)
 
+# configure dac
+i2c = board.I2C()
+dac = TLV320DAC3100(i2c)
+
+# set sample rate & bit depth
+dac.configure_clocks(sample_rate=32000, bit_depth=16)
+
+# use headphones
+dac.headphone_output = True
+dac.headphone_volume = -15  # dB
+
+# setup audio output
+audio = I2SOut(board.I2S_BCLK, board.I2S_WS, board.I2S_DIN)
+mixer = Mixer(
+    voice_count=2,
+    sample_rate=dac.sample_rate,
+    channel_count=1,
+    bits_per_sample=dac.bit_depth,
+    buffer_size=8192,
+)
+mixer.voice[0].level = 0.3  # bass level
+mixer.voice[1].level = 0.1  # melody level
+audio.play(mixer)
+
+# load midi tracks
+def read_midi_track(path:str, waveform=None, envelope:Envelope=None, ppqn:int=240, tempo:int=168) -> MidiTrack:
+    global dac
+    with open(path, "rb") as f:
+        # Ignore SMF header
+        if f.read(4) == b'MThd':
+            f.read(22)
+        else:
+            f.seek(f.tell() - 4)
+
+        return MidiTrack(
+            f.read(), tempo=ppqn*tempo//60,
+            sample_rate=dac.sample_rate,
+            waveform=waveform, envelope=envelope,
+        )
+
+song_bass = read_midi_track(
+    "samples/bass.mid",
+    waveform = relic_waveform.mix(
+        (relic_waveform.triangle(), .9),
+        (relic_waveform.saw(), .2),
+    ),
+    envelope = Envelope(
+        attack_time=.01, attack_level=1,
+        decay_time=.05, sustain_level=.5,
+        release_time=.1,
+    ),
+)
+
+song_melody = read_midi_track(
+    "samples/melody.mid",
+    waveform = relic_waveform.mix(
+        (relic_waveform.square(), .2),
+        (relic_waveform.saw(frequency=2, reverse=True), .3),
+        (relic_waveform.sine(frequency=3), .4),
+    ),
+    envelope = Envelope(
+        attack_time=.02, attack_level=1,
+        decay_time=.1, sustain_level=.2,
+        release_time=.04,
+    ),
+)
+
+# load tiles
 def copy_palette(palette:Palette) -> Palette:
     clone = Palette(len(palette))
     for i, color in enumerate(palette):
@@ -892,6 +965,10 @@ async def main():
         asyncio.create_task(gamepad_handler()),
         asyncio.create_task(button_handler()),
     )
+
+# start background music
+mixer.play(song_bass, voice=0, loop=True)
+mixer.play(song_melody, voice=1, loop=True)
 
 # initial display refresh
 display.refresh()

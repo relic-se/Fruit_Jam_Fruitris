@@ -15,6 +15,7 @@ def main():
     
     # set up paths
     bmp_dir = root_dir / "bitmaps"
+    snd_dir = root_dir / "samples"
     src_dir = root_dir / "src"
     output_dir = root_dir / "dist"
 
@@ -37,6 +38,9 @@ def main():
     try:
         # copy bmp contents
         shutil.copytree(bmp_dir, temp_dir / "bitmaps", dirs_exist_ok=True)
+
+        # copy snd contents
+        shutil.copytree(snd_dir, temp_dir / "samples", dirs_exist_ok=True)
 
         # copy src contents
         shutil.copytree(src_dir, temp_dir, dirs_exist_ok=True)
