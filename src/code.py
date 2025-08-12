@@ -11,7 +11,7 @@ from micropython import const
 import os
 from random import randint
 import supervisor
-from synthio import MidiTrack, Envelope
+import synthio
 import terminalio
 import time
 
@@ -128,7 +128,7 @@ dac.headphone_volume = -15  # dB
 # setup audio output
 audio = I2SOut(board.I2S_BCLK, board.I2S_WS, board.I2S_DIN)
 mixer = Mixer(
-    voice_count=2,
+    voice_count=3,
     sample_rate=dac.sample_rate,
     channel_count=1,
     bits_per_sample=dac.bit_depth,
@@ -136,10 +136,17 @@ mixer = Mixer(
 )
 mixer.voice[0].level = 0.3  # bass level
 mixer.voice[1].level = 0.1  # melody level
+mixer.voice[2].level = 0.2  # sfx level
 audio.play(mixer)
 
+synth = synthio.Synthesizer(
+    sample_rate=dac.sample_rate,
+    channel_count=mixer.channel_count,
+)
+mixer.voice[2].play(synth)
+
 # load midi tracks
-def read_midi_track(path:str, waveform=None, envelope:Envelope=None, ppqn:int=240, tempo:int=168) -> MidiTrack:
+def read_midi_track(path:str, waveform=None, envelope:synthio.Envelope=None, ppqn:int=240, tempo:int=168) -> synthio.MidiTrack:
     global dac
     with open(path, "rb") as f:
         # Ignore SMF header
@@ -148,7 +155,7 @@ def read_midi_track(path:str, waveform=None, envelope:Envelope=None, ppqn:int=24
         else:
             f.seek(f.tell() - 4)
 
-        return MidiTrack(
+        return synthio.MidiTrack(
             f.read(), tempo=ppqn*tempo//60,
             sample_rate=dac.sample_rate,
             waveform=waveform, envelope=envelope,
@@ -160,7 +167,7 @@ song_bass = read_midi_track(
         (relic_waveform.triangle(), .9),
         (relic_waveform.saw(), .2),
     ),
-    envelope = Envelope(
+    envelope = synthio.Envelope(
         attack_time=.01, attack_level=1,
         decay_time=.05, sustain_level=.5,
         release_time=.1,
@@ -174,12 +181,37 @@ song_melody = read_midi_track(
         (relic_waveform.saw(frequency=2, reverse=True), .3),
         (relic_waveform.sine(frequency=3), .4),
     ),
-    envelope = Envelope(
+    envelope = synthio.Envelope(
         attack_time=.02, attack_level=1,
         decay_time=.1, sustain_level=.2,
         release_time=.04,
     ),
 )
+
+# sfx notes
+SFX_DROP = synthio.Note(
+    frequency=synthio.midi_to_hz(78),
+    waveform=relic_waveform.triangle(),
+    envelope=synthio.Envelope(attack_time=0, decay_time=.1, sustain_level=0),
+    amplitude=.2,
+)
+
+SFX_HARD_DROP = synthio.Note(
+    frequency=synthio.midi_to_hz(50),
+    waveform=relic_waveform.saw(),
+    envelope=synthio.Envelope(attack_time=0, decay_time=.3, sustain_level=0),
+    amplitude=.3,
+    bend=synthio.LFO(
+        waveform=relic_waveform.saw(reverse=True, frequency=.5, phase=.5),
+        rate=1/.3,
+        once=True,
+    ),
+)
+
+def play_sfx(note:synthio.Note) -> None:
+    if type(note.bend) is synthio.LFO:
+        note.bend.retrigger()
+    synth.release_all_then_press(note)
 
 # load tiles
 def copy_palette(palette:Palette) -> Palette:
@@ -859,6 +891,7 @@ async def tetromino_handler() -> None:
 
             else:  # move tetromino down
                 tetromino.tile_y += 1
+                play_sfx(SFX_DROP)
 
             display.refresh()
             
@@ -902,6 +935,7 @@ def do_action(action:int) -> None:
                 update_tetromino_indicator_y()
         elif action == ACTION_SOFT_DROP:
             if tetromino.down():
+                play_sfx(SFX_DROP)
                 last_drop_time = time.monotonic()
         elif action == ACTION_HARD_DROP:
             spaces = 0
@@ -909,6 +943,7 @@ def do_action(action:int) -> None:
                 spaces += 1
             score_window.score += spaces
             if spaces:
+                play_sfx(SFX_HARD_DROP)
                 last_drop_time = time.monotonic()
     elif game_state == STATE_WAITING and action != ACTION_QUIT:
         reset_game()
