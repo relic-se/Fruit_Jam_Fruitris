@@ -544,9 +544,11 @@ class ScoreWindow(NumberWindow):
         self.value = (value if value > current else current, value)
 
     def reset(self) -> None:
+        self.score = 0
+    
+    def save(self) -> None:
         if self.score >= self.high_score:
             self._update_save()
-        self.score = 0
     
     def _read_save(self) -> None:
         try:
@@ -929,6 +931,9 @@ async def game_over() -> None:
 
     # update face
     face_tg[0, 0] = (face_bmp.width // face_tg.tile_width) - 1
+
+    # save high score
+    score_window.save()
 
     # play melody
     play_sfx(SFX_GAME_OVER)
