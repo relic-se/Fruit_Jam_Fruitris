@@ -190,12 +190,24 @@ song_melody = read_midi_track(
 )
 
 def play_song() -> None:
+    set_song_tempo()  # reset tempo
     mixer.play(song_bass, voice=0, loop=True)
     mixer.play(song_melody, voice=1, loop=True)
 
 def stop_song() -> None:
     mixer.stop_voice(0)
     mixer.stop_voice(1)
+
+def get_song_tempo(ppqn:int=240) -> int:
+    if hasattr(song_bass, "tempo"):
+        return song_bass.tempo*60//ppqn
+    else:
+        return 168
+
+def set_song_tempo(tempo:int=168, ppqn:int=240) -> None:
+    if hasattr(song_bass, "tempo"):
+        for track in (song_bass, song_melody):
+            track.tempo = ppqn*tempo//60
 
 # sfx notes
 SFX_DROP = synthio.Note(
@@ -983,6 +995,7 @@ def add_lines(lines:int) -> None:
         if current_lines > total_lines:
             level_window.value += 1
             current_lines = 0
+            set_song_tempo(int(get_song_tempo() * 1.05))  # increase song tempo by 5% each level
         set_drink_level(current_lines / total_lines)
         play_sfx(SFX_TETRIS if lines == 4 or not current_lines else SFX_CLEAR)
 
