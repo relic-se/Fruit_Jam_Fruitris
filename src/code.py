@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: 2025 Cooper Dalrymple (@relic-se)
 #
 # SPDX-License-Identifier: GPLv3
+from array import array
+import asyncio
 from audiobusio import I2SOut
 from audiomixer import Mixer
-import asyncio
 import board
 from displayio import Group, TileGrid, OnDiskBitmap, Palette
 from keypad import Keys
@@ -188,6 +189,14 @@ song_melody = read_midi_track(
     ),
 )
 
+def play_song() -> None:
+    mixer.play(song_bass, voice=0, loop=True)
+    mixer.play(song_melody, voice=1, loop=True)
+
+def stop_song() -> None:
+    mixer.stop_voice(0)
+    mixer.stop_voice(1)
+
 # sfx notes
 SFX_DROP = synthio.Note(
     frequency=synthio.midi_to_hz(78),
@@ -203,14 +212,140 @@ SFX_HARD_DROP = synthio.Note(
     amplitude=.3,
     bend=synthio.LFO(
         waveform=relic_waveform.saw(reverse=True, frequency=.5, phase=.5),
-        rate=1/.3,
-        once=True,
+        rate=1/.3, once=True,
+    ),
+)
+
+SFX_MOVE = synthio.Note(
+    frequency=synthio.midi_to_hz(65),
+    waveform=relic_waveform.noise(),
+    envelope=synthio.Envelope(attack_time=.025, decay_time=.05, sustain_level=0),
+    amplitude=.2,
+    bend=synthio.LFO(
+        waveform=relic_waveform.saw(frequency=.5, phase=.5),
+        rate=1/.075, scale=3/12, once=True,
+    ),
+    filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, 5000),
+)
+
+SFX_ROTATE = synthio.Note(
+    frequency=synthio.midi_to_hz(55),
+    waveform=relic_waveform.mix(
+        relic_waveform.saw(),
+        (relic_waveform.noise(), .5),
+    ),
+    envelope=synthio.Envelope(attack_time=.05, decay_time=.05, sustain_level=0),
+    amplitude=.3,
+    filter=synthio.Biquad(
+        synthio.FilterMode.LOW_PASS,
+        synthio.LFO(
+            waveform=relic_waveform.triangle(frequency=.5),
+            rate=1/.1, scale=4000, offset=100, once=True,
+        ),
+        Q=2,
+    ),
+)
+
+SFX_ERROR = synthio.Note(
+    frequency=synthio.midi_to_hz(31),
+    waveform=relic_waveform.mix(
+        relic_waveform.square(),
+        (relic_waveform.noise(), .3),
+    ),
+    envelope=synthio.Envelope(attack_time=0, decay_time=.1, sustain_level=0),
+    amplitude=.3,
+    filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, 8000),
+)
+
+SFX_PLACE = synthio.Note(
+    frequency=synthio.midi_to_hz(43),
+    waveform=relic_waveform.mix(
+        relic_waveform.square(),
+        (relic_waveform.noise(), .4),
+    ),
+    envelope=synthio.Envelope(attack_time=0, decay_time=.1, sustain_level=0),
+    amplitude=.6,
+    bend=synthio.LFO(
+        waveform=relic_waveform.saw(frequency=.5, phase=.5),
+        rate=1/.1, scale=5/12, once=True,
+    ),
+    filter=synthio.Biquad(
+        synthio.FilterMode.LOW_PASS,
+        synthio.LFO(
+            waveform=relic_waveform.saw(frequency=.5, phase=.5),
+            rate=1/.1, scale=-800, offset=1000, once=True,
+        ),
+    ),
+)
+
+def bend_melody(*notes:int) -> array:
+    return array('h', [x * 32767 // 24 for x in notes])
+
+SFX_CLEAR = synthio.Note(
+    frequency=synthio.midi_to_hz(74),
+    waveform=relic_waveform.mix(
+        (relic_waveform.saw(), .5),
+        (relic_waveform.saw(frequency=1+5/12), .5),
+        (relic_waveform.saw(frequency=1+7/12), .5),
+    ),
+    amplitude=synthio.LFO(
+        waveform=array('h', [32767, 32767, 0, 0]),
+        scale=.2, rate=.75, interpolate=False, once=True,
+    ),
+    bend=synthio.LFO(
+        waveform=bend_melody(0, 1, 4, 7, 19, 19, 19),
+        rate=1.5, scale=-2, interpolate=False, once=True,
+    ),
+    filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, synthio.LFO(scale=400, offset=1600, rate=5), Q=1.2),
+)
+
+SFX_TETRIS = synthio.Note(
+    frequency=synthio.midi_to_hz(62),
+    waveform=relic_waveform.mix(
+        (relic_waveform.saw(), .5),
+        (relic_waveform.saw(frequency=1+5/12), .5),
+        (relic_waveform.saw(frequency=1+7/12), .5),
+    ),
+    amplitude=synthio.LFO(
+        waveform=array('h', [32767, 32767, 0, 0]),
+        scale=.2, rate=1, interpolate=False, once=True,
+    ),
+    bend=synthio.LFO(
+        waveform=bend_melody(0, 2, 4, 5, 7, 8, 10, 12, 17, 17),
+        rate=2, scale=2, interpolate=False, once=True,
+    ),
+    filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, synthio.LFO(scale=400, offset=1600, rate=5), Q=1.2),
+)
+
+SFX_GAME_OVER = synthio.Note(
+    frequency=synthio.midi_to_hz(50),
+    waveform=relic_waveform.mix(
+        relic_waveform.square(),
+        (relic_waveform.square(frequency=1+7/12), .4),
+        (relic_waveform.noise(), .4),
+    ),
+    amplitude=synthio.LFO(
+        waveform=array('h', [32767, 32767, 0, 0]),
+        scale=.2, rate=.125, interpolate=False, once=True,
+    ),
+    bend=synthio.LFO(
+        waveform=bend_melody(0, 2, 4, 5, 7, 7),
+        rate=.25, scale=-2, interpolate=False, once=True,
+    ),
+    filter=synthio.Biquad(
+        synthio.FilterMode.LOW_PASS,
+        synthio.LFO(
+            waveform=array('h', [0, -32767]),
+            scale=2500, offset=3000, rate=.25, once=True,
+        ),
+        Q=2.5,
     ),
 )
 
 def play_sfx(note:synthio.Note) -> None:
-    if type(note.bend) is synthio.LFO:
-        note.bend.retrigger()
+    for lfo in (note.bend, note.amplitude, (note.filter.frequency if type(note.filter) is synthio.Biquad else None)):
+        if type(lfo) is synthio.LFO:
+            lfo.retrigger()
     synth.release_all_then_press(note)
 
 # load tiles
@@ -778,12 +913,14 @@ def reset_game() -> None:
     current_lines = 0
     set_drink_level(0)
     game_state = STATE_PLAYING
+    play_song()
 
     display.refresh()
 
 async def game_over() -> None:
     global game_state, display, tetromino, tetromino_indicator, next_tetromino
     game_state = STATE_GAME_OVER
+    stop_song()
 
     # hide tetrominos
     tetromino.hidden = True
@@ -792,6 +929,9 @@ async def game_over() -> None:
 
     # update face
     face_tg[0, 0] = (face_bmp.width // face_tg.tile_width) - 1
+
+    # play melody
+    play_sfx(SFX_GAME_OVER)
 
     # wipe out grid
     for y in range(GRID_HEIGHT - 1, -1, -1):
@@ -839,6 +979,7 @@ def add_lines(lines:int) -> None:
             level_window.value += 1
             current_lines = 0
         set_drink_level(current_lines / total_lines)
+        play_sfx(SFX_TETRIS if lines == 4 or not current_lines else SFX_CLEAR)
 
 last_drop_time = None
 async def tetromino_handler() -> None:
@@ -856,6 +997,7 @@ async def tetromino_handler() -> None:
             if tetromino.check_collide(y=1):  # place if collided
                 tetromino.place()
                 tetromino_indicator.hidden = True
+                play_sfx(SFX_PLACE)
 
                 # check for line clearing
                 lines = 0
@@ -925,14 +1067,23 @@ def do_action(action:int) -> None:
                 tetromino_indicator.rotate_right(True)
                 tetromino_indicator.tile_x = tetromino.tile_x
                 update_tetromino_indicator_y()
+                play_sfx(SFX_ROTATE)
+            else:
+                play_sfx(SFX_ERROR)
         elif action == ACTION_LEFT:
             if tetromino.left():
                 tetromino_indicator.tile_x = tetromino.tile_x
                 update_tetromino_indicator_y()
+                play_sfx(SFX_MOVE)
+            else:
+                play_sfx(SFX_ERROR)
         elif action == ACTION_RIGHT:
             if tetromino.right():
                 tetromino_indicator.tile_x = tetromino.tile_x
                 update_tetromino_indicator_y()
+                play_sfx(SFX_MOVE)
+            else:
+                play_sfx(SFX_ERROR)
         elif action == ACTION_SOFT_DROP:
             if tetromino.down():
                 play_sfx(SFX_DROP)
@@ -1000,10 +1151,6 @@ async def main():
         asyncio.create_task(gamepad_handler()),
         asyncio.create_task(button_handler()),
     )
-
-# start background music
-mixer.play(song_bass, voice=0, loop=True)
-mixer.play(song_melody, voice=1, loop=True)
 
 # initial display refresh
 display.refresh()
