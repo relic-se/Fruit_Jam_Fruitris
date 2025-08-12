@@ -25,7 +25,10 @@ import relic_waveform
 import gamepad
 from usb.core import USBError
 
-request_display_config(640, 480)
+try:
+    request_display_config()  # attempt to use default display size
+except (ValueError, TypeError):
+    request_display_config(640, 480)
 display = supervisor.runtime.display
 display.auto_refresh = False
 
@@ -405,7 +408,7 @@ face_bmp, face_palette = adafruit_imageload.load("bitmaps/face.bmp")
 face_palette.make_transparent(2)
 
 # load drink bitmap
-drink_bmp = OnDiskBitmap("bitmaps/drink.bmp")
+drink_bmp = OnDiskBitmap("bitmaps/drink{:s}.bmp".format("-sm" if display.width / display.height > 1.5 else ""))
 drink_map = (12, 3, 5, 4, 1, 10, 14, 9, 7, 6, 8)  # convert level index to palette index
 drink_map = tuple([(x, drink_bmp.pixel_shader[x]) for x in drink_map])  # copy colors
 for i, color in drink_map:
@@ -762,7 +765,7 @@ main_group.append(bg_grid)
 # setup grid container
 grid_window = Window(
     width=GRID_WIDTH + 2, height=GRID_HEIGHT + 2,
-    x=(SCREEN_WIDTH - GRID_WIDTH - 2) // 2,
+    x=(SCREEN_WIDTH - GRID_WIDTH - 2) // 2 + (SCREEN_WIDTH % 2),  # account of odd screen width
     y=(SCREEN_HEIGHT - GRID_HEIGHT - 2) // 2,
 )
 main_group.append(grid_window)
@@ -783,14 +786,17 @@ title_bmp.pixel_shader.make_transparent(8)
 title_tg = TileGrid(
     title_bmp, pixel_shader=title_bmp.pixel_shader,
     y=grid_window.y,
-    x=((SCREEN_WIDTH - GRID_WIDTH - 2) * TILE_SIZE) // 4 - title_bmp.width // 2,
+    x=grid_window.x // 2 - title_bmp.width // 2,
 )
 main_group.append(title_tg)
 
 # waiting text
 waiting_text = Label(terminalio.FONT, text="Press any key\n to start...", color=0xffffff)
 waiting_text.anchor_point = (.5, .5)
-waiting_text.anchored_position = (display.width // 2, display.height // 2)
+waiting_text.anchored_position = (
+    (grid_window.x + grid_window.width // 2) * SCALE,
+    (grid_window.y + grid_window.height // 2) * SCALE
+)
 text_group.append(waiting_text)
 
 # next tetromino container
@@ -840,13 +846,17 @@ level_window = NumberWindow(
     label="Level", value=1,
     x=WINDOW_GAP, y=level_window_y,
     height=grid_window.tile_height + grid_window.tile_y - level_window_y,
+    width=WINDOW_WIDTH + (SCREEN_WIDTH % 2),  # account for odd screen width
 )
 main_group.append(level_window)
 
 drink_tg = TileGrid(
     drink_bmp, pixel_shader=drink_bmp.pixel_shader,
     x=(level_window.width - drink_bmp.width) // 2,
-    y=level_window.height - TILE_SIZE - drink_bmp.height - (level_window.width - TILE_SIZE * 2 - drink_bmp.width) // 2,
+    y=max(
+        level_window.height - TILE_SIZE - drink_bmp.height - (level_window.width - TILE_SIZE * 2 - drink_bmp.width) // 2,  # equal padding (4:3)
+        (level_window.height - drink_bmp.height) // 2  # center of window (1.8:1)
+    ),
 )
 level_window.append(drink_tg)
 
@@ -961,7 +971,7 @@ async def game_over() -> None:
     waiting_text.hidden = False
 
     # clear out area for text
-    for y in range(GRID_HEIGHT // 2 - 2, GRID_HEIGHT // 2 + 2):
+    for y in range(GRID_HEIGHT // 2 - 2 + (SCREEN_HEIGHT % 2), GRID_HEIGHT // 2 + 2):
         for x in range(SCALE - 1, GRID_WIDTH - (SCALE - 1)):
             tilegrid[x, y] = 0
     display.refresh()
