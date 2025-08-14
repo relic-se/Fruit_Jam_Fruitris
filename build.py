@@ -72,7 +72,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # create output zip filename
-    output_zip = str(output_dir / git_name) + "-{}.zip".format(git_commit)
+    output_zip = str(output_dir / git_name) + ".zip"
     
     # create a clean temporary directory for building the zip
     temp_dir = output_dir / "temp"
