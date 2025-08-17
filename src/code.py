@@ -127,7 +127,7 @@ dac.configure_clocks(sample_rate=32000, bit_depth=16)
 
 # use headphones
 dac.headphone_output = True
-dac.headphone_volume = -15  # dB
+dac.dac_volume = 0  # dB
 
 # setup audio output
 audio = I2SOut(board.I2S_BCLK, board.I2S_WS, board.I2S_DIN)
@@ -1157,19 +1157,32 @@ async def gamepad_handler() -> None:
             await asyncio.sleep(.4)
 
 button_map = (
-    ACTION_SOFT_DROP,  # button #1
+    None,
+    ACTION_LEFT,       # button #1
     ACTION_ROTATE,     # button #2
-    ACTION_QUIT,       # button #3
+    ACTION_HARD_DROP,  # button #1 + button #2 
+    ACTION_RIGHT,      # button #3
+    ACTION_QUIT,       # button #1 + button #3
+    ACTION_SOFT_DROP,  # button #2 + button #3 
+    None,              # button #1 + button #2 + button #3
 )
 
 async def button_handler() -> None:
     global tetromino, buttons
 
+    button_pressed = 0
+
     while True:
 
         # check hardware buttons
-        if (event := buttons.events.get()) and event.pressed:
-            do_action(button_map[event.key_number])
+        if (event := buttons.events.get()) and event.released:
+            if button_pressed == 7:  # ignore all buttons pressed
+                button_pressed = 0
+            elif button_pressed > 0:
+                do_action(button_map[button_pressed])
+                button_pressed = 0
+        elif event and event.pressed:
+            button_pressed += (1 << event.key_number)
 
         await asyncio.sleep(1/30)
 
