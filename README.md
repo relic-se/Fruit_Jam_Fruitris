@@ -5,14 +5,14 @@ Tetris, _**Fruit Jamified!**_
 
 ## Controls
 
-| Action           | Keyboard      | Gamepad | Buttons   |
-|------------------|---------------|---------|-----------|
-| Move Left        | Left Arrow    | Left    |           |
-| Move Right       | Right Arrow   | Right   |           |
-| Rotate Clockwise | Up Arrow or X | Up or A | Button #2 |
-| Drop: Soft       | Down Arrow    | Down    | Button #1 |
-| Drop: Hard       | Z             | B       |           |
-| Quit (reload)    | Enter         | Start   | Button #3 |
+| Action           | Keyboard      | Gamepad | Buttons        |
+|------------------|---------------|---------|----------------|
+| Move Left        | Left Arrow    | Left    | Button #1      |
+| Move Right       | Right Arrow   | Right   | Button #3      |
+| Rotate Clockwise | Up Arrow or X | Up or A | Button #2      |
+| Drop: Soft       | Down Arrow    | Down    | Button #2 & #3 |
+| Drop: Hard       | Z             | B       | Button #1 & #2 |
+| Quit (reload)    | Enter         | Start   | Button #1 & #3 |
 
 ## Credits
 
