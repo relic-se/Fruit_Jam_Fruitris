@@ -3,24 +3,21 @@
 # SPDX-License-Identifier: GPLv3
 from array import array
 import asyncio
-from audiobusio import I2SOut
-from audiomixer import Mixer
 import board
 from displayio import Group, TileGrid, OnDiskBitmap, Palette
+import json
 from keypad import Keys
 from micropython import const
 import os
 from random import randint
 import supervisor
-import synthio
 import terminalio
 import time
 
 from adafruit_display_text.label import Label
 from adafruit_fruitjam.peripherals import request_display_config
 import adafruit_imageload
-from adafruit_tlv320 import TLV320DAC3100
-import relic_waveform
+import adafruit_pathlib as pathlib
 
 import gamepad
 from usb.core import USBError
@@ -112,256 +109,288 @@ TETROMINOS = [
     }
 ]
 
-# configure hardware
-buttons = Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
-if NEOPIXELS:
-    from neopixel import NeoPixel
-    neopixels = NeoPixel(board.NEOPIXEL, 5)
+# read config
+launcher_config = {}
+if pathlib.Path("launcher.conf.json").exists():
+    with open("launcher.conf.json", "r") as f:
+        launcher_config = json.load(f)
 
-# configure dac
+# Check if DAC is connected
 i2c = board.I2C()
-dac = TLV320DAC3100(i2c)
+while not i2c.try_lock():
+    time.sleep(0.01)
+tlv320_present = 0x18 in i2c.scan()
+i2c.unlock()
 
-# set sample rate & bit depth
-dac.configure_clocks(sample_rate=32000, bit_depth=16)
+if tlv320_present:
+    from audiobusio import I2SOut
+    from audiomixer import Mixer
+    import synthio
 
-# use headphones
-dac.headphone_output = True
-dac.headphone_volume = -15  # dB
+    import adafruit_tlv320
+    import relic_waveform
 
-# setup audio output
-audio = I2SOut(board.I2S_BCLK, board.I2S_WS, board.I2S_DIN)
-mixer = Mixer(
-    voice_count=3,
-    sample_rate=dac.sample_rate,
-    channel_count=1,
-    bits_per_sample=dac.bit_depth,
-    buffer_size=8192,
-)
-mixer.voice[0].level = 0.3  # bass level
-mixer.voice[1].level = 0.1  # melody level
-mixer.voice[2].level = 0.2  # sfx level
-audio.play(mixer)
+    dac = adafruit_tlv320.TLV320DAC3100(i2c)
 
-synth = synthio.Synthesizer(
-    sample_rate=dac.sample_rate,
-    channel_count=mixer.channel_count,
-)
-mixer.voice[2].play(synth)
+    # set sample rate & bit depth
+    dac.configure_clocks(sample_rate=32000, bit_depth=16)
 
-# load midi tracks
-def read_midi_track(path:str, waveform=None, envelope:synthio.Envelope=None, ppqn:int=240, tempo:int=168) -> synthio.MidiTrack:
-    global dac
-    with open(path, "rb") as f:
-        # Ignore SMF header
-        if f.read(4) == b'MThd':
-            f.read(22)
-        else:
-            f.seek(f.tell() - 4)
+    if "tlv320" in launcher_config and launcher_config["tlv320"].get("output") == "speaker":
+        # use speaker
+        dac.speaker_output = True
+        dac.dac_volume = launcher_config["tlv320"].get("volume", 5)  # dB
+    else:
+        # use headphones
+        dac.headphone_output = True
+        dac.headphone_volume = launcher_config["tlv320"].get("volume", -15) if "tlv320" in launcher_config else -15  # dB
 
-        return synthio.MidiTrack(
-            f.read(), tempo=ppqn*tempo//60,
-            sample_rate=dac.sample_rate,
-            waveform=waveform, envelope=envelope,
-        )
+    # setup audio output
+    audio = I2SOut(board.I2S_BCLK, board.I2S_WS, board.I2S_DIN)
+    mixer = Mixer(
+        voice_count=3,
+        sample_rate=dac.sample_rate,
+        channel_count=1,
+        bits_per_sample=dac.bit_depth,
+        buffer_size=8192,
+    )
+    mixer.voice[0].level = 0.3  # bass level
+    mixer.voice[1].level = 0.1  # melody level
+    mixer.voice[2].level = 0.2  # sfx level
+    audio.play(mixer)
 
-song_bass = read_midi_track(
-    "samples/bass.mid",
-    waveform = relic_waveform.mix(
-        (relic_waveform.triangle(), .9),
-        (relic_waveform.saw(), .2),
-    ),
-    envelope = synthio.Envelope(
-        attack_time=.01, attack_level=1,
-        decay_time=.05, sustain_level=.5,
-        release_time=.1,
-    ),
-)
+    synth = synthio.Synthesizer(
+        sample_rate=dac.sample_rate,
+        channel_count=mixer.channel_count,
+    )
+    mixer.voice[2].play(synth)
 
-song_melody = read_midi_track(
-    "samples/melody.mid",
-    waveform = relic_waveform.mix(
-        (relic_waveform.square(), .2),
-        (relic_waveform.saw(frequency=2, reverse=True), .3),
-        (relic_waveform.sine(frequency=3), .4),
-    ),
-    envelope = synthio.Envelope(
-        attack_time=.02, attack_level=1,
-        decay_time=.1, sustain_level=.2,
-        release_time=.04,
-    ),
-)
+    # load midi tracks
+    def read_midi_track(path:str, waveform=None, envelope:synthio.Envelope=None, ppqn:int=240, tempo:int=168) -> synthio.MidiTrack:
+        global dac
+        with open(path, "rb") as f:
+            # Ignore SMF header
+            if f.read(4) == b'MThd':
+                f.read(22)
+            else:
+                f.seek(f.tell() - 4)
+
+            return synthio.MidiTrack(
+                f.read(), tempo=ppqn*tempo//60,
+                sample_rate=dac.sample_rate,
+                waveform=waveform, envelope=envelope,
+            )
+
+    song_bass = read_midi_track(
+        "samples/bass.mid",
+        waveform = relic_waveform.mix(
+            (relic_waveform.triangle(), .9),
+            (relic_waveform.saw(), .2),
+        ),
+        envelope = synthio.Envelope(
+            attack_time=.01, attack_level=1,
+            decay_time=.05, sustain_level=.5,
+            release_time=.1,
+        ),
+    )
+
+    song_melody = read_midi_track(
+        "samples/melody.mid",
+        waveform = relic_waveform.mix(
+            (relic_waveform.square(), .2),
+            (relic_waveform.saw(frequency=2, reverse=True), .3),
+            (relic_waveform.sine(frequency=3), .4),
+        ),
+        envelope = synthio.Envelope(
+            attack_time=.02, attack_level=1,
+            decay_time=.1, sustain_level=.2,
+            release_time=.04,
+        ),
+    )
+
+    # sfx notes
+    SFX_DROP = synthio.Note(
+        frequency=synthio.midi_to_hz(78),
+        waveform=relic_waveform.triangle(),
+        envelope=synthio.Envelope(attack_time=0, decay_time=.1, sustain_level=0),
+        amplitude=.2,
+    )
+
+    SFX_HARD_DROP = synthio.Note(
+        frequency=synthio.midi_to_hz(50),
+        waveform=relic_waveform.saw(),
+        envelope=synthio.Envelope(attack_time=0, decay_time=.3, sustain_level=0),
+        amplitude=.3,
+        bend=synthio.LFO(
+            waveform=relic_waveform.saw(reverse=True, frequency=.5, phase=.5),
+            rate=1/.3, once=True,
+        ),
+    )
+
+    SFX_MOVE = synthio.Note(
+        frequency=synthio.midi_to_hz(65),
+        waveform=relic_waveform.noise(),
+        envelope=synthio.Envelope(attack_time=.025, decay_time=.05, sustain_level=0),
+        amplitude=.2,
+        bend=synthio.LFO(
+            waveform=relic_waveform.saw(frequency=.5, phase=.5),
+            rate=1/.075, scale=3/12, once=True,
+        ),
+        filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, 5000),
+    )
+
+    SFX_ROTATE = synthio.Note(
+        frequency=synthio.midi_to_hz(55),
+        waveform=relic_waveform.mix(
+            relic_waveform.saw(),
+            (relic_waveform.noise(), .5),
+        ),
+        envelope=synthio.Envelope(attack_time=.05, decay_time=.05, sustain_level=0),
+        amplitude=.3,
+        filter=synthio.Biquad(
+            synthio.FilterMode.LOW_PASS,
+            synthio.LFO(
+                waveform=relic_waveform.triangle(frequency=.5),
+                rate=1/.1, scale=4000, offset=100, once=True,
+            ),
+            Q=2,
+        ),
+    )
+
+    SFX_ERROR = synthio.Note(
+        frequency=synthio.midi_to_hz(31),
+        waveform=relic_waveform.mix(
+            relic_waveform.square(),
+            (relic_waveform.noise(), .3),
+        ),
+        envelope=synthio.Envelope(attack_time=0, decay_time=.1, sustain_level=0),
+        amplitude=.3,
+        filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, 8000),
+    )
+
+    SFX_PLACE = synthio.Note(
+        frequency=synthio.midi_to_hz(43),
+        waveform=relic_waveform.mix(
+            relic_waveform.square(),
+            (relic_waveform.noise(), .4),
+        ),
+        envelope=synthio.Envelope(attack_time=0, decay_time=.1, sustain_level=0),
+        amplitude=.6,
+        bend=synthio.LFO(
+            waveform=relic_waveform.saw(frequency=.5, phase=.5),
+            rate=1/.1, scale=5/12, once=True,
+        ),
+        filter=synthio.Biquad(
+            synthio.FilterMode.LOW_PASS,
+            synthio.LFO(
+                waveform=relic_waveform.saw(frequency=.5, phase=.5),
+                rate=1/.1, scale=-800, offset=1000, once=True,
+            ),
+        ),
+    )
+
+    def bend_melody(*notes:int) -> array:
+        return array('h', [x * 32767 // 24 for x in notes])
+
+    SFX_CLEAR = synthio.Note(
+        frequency=synthio.midi_to_hz(74),
+        waveform=relic_waveform.mix(
+            (relic_waveform.saw(), .5),
+            (relic_waveform.saw(frequency=1+5/12), .5),
+            (relic_waveform.saw(frequency=1+7/12), .5),
+        ),
+        amplitude=synthio.LFO(
+            waveform=array('h', [32767, 32767, 0, 0]),
+            scale=.2, rate=.75, interpolate=False, once=True,
+        ),
+        bend=synthio.LFO(
+            waveform=bend_melody(0, 1, 4, 7, 19, 19, 19),
+            rate=1.5, scale=-2, interpolate=False, once=True,
+        ),
+        filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, synthio.LFO(scale=400, offset=1600, rate=5), Q=1.2),
+    )
+
+    SFX_TETRIS = synthio.Note(
+        frequency=synthio.midi_to_hz(62),
+        waveform=relic_waveform.mix(
+            (relic_waveform.saw(), .5),
+            (relic_waveform.saw(frequency=1+5/12), .5),
+            (relic_waveform.saw(frequency=1+7/12), .5),
+        ),
+        amplitude=synthio.LFO(
+            waveform=array('h', [32767, 32767, 0, 0]),
+            scale=.2, rate=1, interpolate=False, once=True,
+        ),
+        bend=synthio.LFO(
+            waveform=bend_melody(0, 2, 4, 5, 7, 8, 10, 12, 17, 17),
+            rate=2, scale=2, interpolate=False, once=True,
+        ),
+        filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, synthio.LFO(scale=400, offset=1600, rate=5), Q=1.2),
+    )
+
+    SFX_GAME_OVER = synthio.Note(
+        frequency=synthio.midi_to_hz(50),
+        waveform=relic_waveform.mix(
+            relic_waveform.square(),
+            (relic_waveform.square(frequency=1+7/12), .4),
+            (relic_waveform.noise(), .4),
+        ),
+        amplitude=synthio.LFO(
+            waveform=array('h', [32767, 32767, 0, 0]),
+            scale=.2, rate=.125, interpolate=False, once=True,
+        ),
+        bend=synthio.LFO(
+            waveform=bend_melody(0, 2, 4, 5, 7, 7),
+            rate=.25, scale=-2, interpolate=False, once=True,
+        ),
+        filter=synthio.Biquad(
+            synthio.FilterMode.LOW_PASS,
+            synthio.LFO(
+                waveform=array('h', [0, -32767]),
+                scale=2500, offset=3000, rate=.25, once=True,
+            ),
+            Q=2.5,
+        ),
+    )
+
+else:
+    SFX_DROP = None
+    SFX_HARD_DROP = None
+    SFX_MOVE = None
+    SFX_ROTATE = None
+    SFX_ERROR = None
+    SFX_PLACE = None
+    SFX_CLEAR = None
+    SFX_TETRIS = None
+    SFX_GAME_OVER = None
 
 def play_song() -> None:
-    set_song_tempo()  # reset tempo
-    mixer.play(song_bass, voice=0, loop=True)
-    mixer.play(song_melody, voice=1, loop=True)
+    if tlv320_present:
+        set_song_tempo()  # reset tempo
+        mixer.play(song_bass, voice=0, loop=True)
+        mixer.play(song_melody, voice=1, loop=True)
 
 def stop_song() -> None:
-    mixer.stop_voice(0)
-    mixer.stop_voice(1)
+    if tlv320_present:
+        mixer.stop_voice(0)
+        mixer.stop_voice(1)
 
 def get_song_tempo(ppqn:int=240) -> int:
-    if hasattr(song_bass, "tempo"):
+    if tlv320_present and hasattr(song_bass, "tempo"):
         return song_bass.tempo*60//ppqn
     else:
         return 168
 
 def set_song_tempo(tempo:int=168, ppqn:int=240) -> None:
-    if hasattr(song_bass, "tempo"):
+    if tlv320_present and hasattr(song_bass, "tempo"):
         for track in (song_bass, song_melody):
             track.tempo = ppqn*tempo//60
 
-# sfx notes
-SFX_DROP = synthio.Note(
-    frequency=synthio.midi_to_hz(78),
-    waveform=relic_waveform.triangle(),
-    envelope=synthio.Envelope(attack_time=0, decay_time=.1, sustain_level=0),
-    amplitude=.2,
-)
-
-SFX_HARD_DROP = synthio.Note(
-    frequency=synthio.midi_to_hz(50),
-    waveform=relic_waveform.saw(),
-    envelope=synthio.Envelope(attack_time=0, decay_time=.3, sustain_level=0),
-    amplitude=.3,
-    bend=synthio.LFO(
-        waveform=relic_waveform.saw(reverse=True, frequency=.5, phase=.5),
-        rate=1/.3, once=True,
-    ),
-)
-
-SFX_MOVE = synthio.Note(
-    frequency=synthio.midi_to_hz(65),
-    waveform=relic_waveform.noise(),
-    envelope=synthio.Envelope(attack_time=.025, decay_time=.05, sustain_level=0),
-    amplitude=.2,
-    bend=synthio.LFO(
-        waveform=relic_waveform.saw(frequency=.5, phase=.5),
-        rate=1/.075, scale=3/12, once=True,
-    ),
-    filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, 5000),
-)
-
-SFX_ROTATE = synthio.Note(
-    frequency=synthio.midi_to_hz(55),
-    waveform=relic_waveform.mix(
-        relic_waveform.saw(),
-        (relic_waveform.noise(), .5),
-    ),
-    envelope=synthio.Envelope(attack_time=.05, decay_time=.05, sustain_level=0),
-    amplitude=.3,
-    filter=synthio.Biquad(
-        synthio.FilterMode.LOW_PASS,
-        synthio.LFO(
-            waveform=relic_waveform.triangle(frequency=.5),
-            rate=1/.1, scale=4000, offset=100, once=True,
-        ),
-        Q=2,
-    ),
-)
-
-SFX_ERROR = synthio.Note(
-    frequency=synthio.midi_to_hz(31),
-    waveform=relic_waveform.mix(
-        relic_waveform.square(),
-        (relic_waveform.noise(), .3),
-    ),
-    envelope=synthio.Envelope(attack_time=0, decay_time=.1, sustain_level=0),
-    amplitude=.3,
-    filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, 8000),
-)
-
-SFX_PLACE = synthio.Note(
-    frequency=synthio.midi_to_hz(43),
-    waveform=relic_waveform.mix(
-        relic_waveform.square(),
-        (relic_waveform.noise(), .4),
-    ),
-    envelope=synthio.Envelope(attack_time=0, decay_time=.1, sustain_level=0),
-    amplitude=.6,
-    bend=synthio.LFO(
-        waveform=relic_waveform.saw(frequency=.5, phase=.5),
-        rate=1/.1, scale=5/12, once=True,
-    ),
-    filter=synthio.Biquad(
-        synthio.FilterMode.LOW_PASS,
-        synthio.LFO(
-            waveform=relic_waveform.saw(frequency=.5, phase=.5),
-            rate=1/.1, scale=-800, offset=1000, once=True,
-        ),
-    ),
-)
-
-def bend_melody(*notes:int) -> array:
-    return array('h', [x * 32767 // 24 for x in notes])
-
-SFX_CLEAR = synthio.Note(
-    frequency=synthio.midi_to_hz(74),
-    waveform=relic_waveform.mix(
-        (relic_waveform.saw(), .5),
-        (relic_waveform.saw(frequency=1+5/12), .5),
-        (relic_waveform.saw(frequency=1+7/12), .5),
-    ),
-    amplitude=synthio.LFO(
-        waveform=array('h', [32767, 32767, 0, 0]),
-        scale=.2, rate=.75, interpolate=False, once=True,
-    ),
-    bend=synthio.LFO(
-        waveform=bend_melody(0, 1, 4, 7, 19, 19, 19),
-        rate=1.5, scale=-2, interpolate=False, once=True,
-    ),
-    filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, synthio.LFO(scale=400, offset=1600, rate=5), Q=1.2),
-)
-
-SFX_TETRIS = synthio.Note(
-    frequency=synthio.midi_to_hz(62),
-    waveform=relic_waveform.mix(
-        (relic_waveform.saw(), .5),
-        (relic_waveform.saw(frequency=1+5/12), .5),
-        (relic_waveform.saw(frequency=1+7/12), .5),
-    ),
-    amplitude=synthio.LFO(
-        waveform=array('h', [32767, 32767, 0, 0]),
-        scale=.2, rate=1, interpolate=False, once=True,
-    ),
-    bend=synthio.LFO(
-        waveform=bend_melody(0, 2, 4, 5, 7, 8, 10, 12, 17, 17),
-        rate=2, scale=2, interpolate=False, once=True,
-    ),
-    filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, synthio.LFO(scale=400, offset=1600, rate=5), Q=1.2),
-)
-
-SFX_GAME_OVER = synthio.Note(
-    frequency=synthio.midi_to_hz(50),
-    waveform=relic_waveform.mix(
-        relic_waveform.square(),
-        (relic_waveform.square(frequency=1+7/12), .4),
-        (relic_waveform.noise(), .4),
-    ),
-    amplitude=synthio.LFO(
-        waveform=array('h', [32767, 32767, 0, 0]),
-        scale=.2, rate=.125, interpolate=False, once=True,
-    ),
-    bend=synthio.LFO(
-        waveform=bend_melody(0, 2, 4, 5, 7, 7),
-        rate=.25, scale=-2, interpolate=False, once=True,
-    ),
-    filter=synthio.Biquad(
-        synthio.FilterMode.LOW_PASS,
-        synthio.LFO(
-            waveform=array('h', [0, -32767]),
-            scale=2500, offset=3000, rate=.25, once=True,
-        ),
-        Q=2.5,
-    ),
-)
-
 def play_sfx(note:synthio.Note) -> None:
-    for lfo in (note.bend, note.amplitude, (note.filter.frequency if type(note.filter) is synthio.Biquad else None)):
-        if type(lfo) is synthio.LFO:
-            lfo.retrigger()
-    synth.release_all_then_press(note)
+    if tlv320_present:
+        for lfo in (note.bend, note.amplitude, (note.filter.frequency if type(note.filter) is synthio.Biquad else None)):
+            if type(lfo) is synthio.LFO:
+                lfo.retrigger()
+        synth.release_all_then_press(note)
 
 # load tiles
 def copy_palette(palette:Palette) -> Palette:
