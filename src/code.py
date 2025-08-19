@@ -1,4 +1,5 @@
 # SPDX-FileCopyrightText: 2025 Cooper Dalrymple (@relic-se)
+# SPDX-FileCopyrightText: 2025 RetiredWizard
 #
 # SPDX-License-Identifier: GPLv3
 from array import array
@@ -1129,49 +1130,50 @@ gamepad_device = None
 
 def do_action(action:int) -> None:
     global tetromino, last_drop_time, game_state, gamepad_device
-    if game_state == STATE_PLAYING:
-        if action == ACTION_ROTATE:
-            if tetromino.rotate_right():
-                tetromino_indicator.rotate_right(True)
-                tetromino_indicator.tile_x = tetromino.tile_x
-                update_tetromino_indicator_y()
-                play_sfx(SFX_ROTATE)
-            else:
-                play_sfx(SFX_ERROR)
-        elif action == ACTION_LEFT:
-            if tetromino.left():
-                tetromino_indicator.tile_x = tetromino.tile_x
-                update_tetromino_indicator_y()
-                play_sfx(SFX_MOVE)
-            else:
-                play_sfx(SFX_ERROR)
-        elif action == ACTION_RIGHT:
-            if tetromino.right():
-                tetromino_indicator.tile_x = tetromino.tile_x
-                update_tetromino_indicator_y()
-                play_sfx(SFX_MOVE)
-            else:
-                play_sfx(SFX_ERROR)
-        elif action == ACTION_SOFT_DROP:
-            if tetromino.down():
-                play_sfx(SFX_DROP)
-                last_drop_time = time.monotonic()
-        elif action == ACTION_HARD_DROP:
-            spaces = 0
-            while tetromino.down():
-                spaces += 1
-            score_window.score += spaces
-            if spaces:
-                play_sfx(SFX_HARD_DROP)
-                last_drop_time = time.monotonic()
-    elif game_state == STATE_WAITING and action != ACTION_QUIT:
-        reset_game()
-    if action == ACTION_QUIT:
-        if gamepad_device is not None and not gamepad_device.device.is_kernel_driver_active(gamepad_device.interface):
-            gamepad_device.device.attach_kernel_driver(gamepad_device.interface)
-        supervisor.reload()
-    
-    display.refresh()
+    if action is not None:
+        if game_state == STATE_PLAYING:
+            if action == ACTION_ROTATE:
+                if tetromino.rotate_right():
+                    tetromino_indicator.rotate_right(True)
+                    tetromino_indicator.tile_x = tetromino.tile_x
+                    update_tetromino_indicator_y()
+                    play_sfx(SFX_ROTATE)
+                else:
+                    play_sfx(SFX_ERROR)
+            elif action == ACTION_LEFT:
+                if tetromino.left():
+                    tetromino_indicator.tile_x = tetromino.tile_x
+                    update_tetromino_indicator_y()
+                    play_sfx(SFX_MOVE)
+                else:
+                    play_sfx(SFX_ERROR)
+            elif action == ACTION_RIGHT:
+                if tetromino.right():
+                    tetromino_indicator.tile_x = tetromino.tile_x
+                    update_tetromino_indicator_y()
+                    play_sfx(SFX_MOVE)
+                else:
+                    play_sfx(SFX_ERROR)
+            elif action == ACTION_SOFT_DROP:
+                if tetromino.down():
+                    play_sfx(SFX_DROP)
+                    last_drop_time = time.monotonic()
+            elif action == ACTION_HARD_DROP:
+                spaces = 0
+                while tetromino.down():
+                    spaces += 1
+                score_window.score += spaces
+                if spaces:
+                    play_sfx(SFX_HARD_DROP)
+                    last_drop_time = time.monotonic()
+        elif game_state == STATE_WAITING and action != ACTION_QUIT:
+            reset_game()
+        if action == ACTION_QUIT:
+            if gamepad_device is not None and not gamepad_device.device.is_kernel_driver_active(gamepad_device.interface):
+                gamepad_device.device.attach_kernel_driver(gamepad_device.interface)
+            supervisor.reload()
+        
+        display.refresh()
 
 async def gamepad_handler() -> None:
     global gamepad_device, gamepad_map
@@ -1199,19 +1201,30 @@ async def gamepad_handler() -> None:
 if buttons is not None:
     
     BUTTON_MAP = (
-        ACTION_SOFT_DROP,  # button #1
+        None,
+        ACTION_LEFT,       # button #1
         ACTION_ROTATE,     # button #2
-        ACTION_QUIT,       # button #3
+        None,              # button #1 & #2
+        ACTION_RIGHT,      # button #3
+        ACTION_HARD_DROP,  # button #1 & #3
+        ACTION_SOFT_DROP,  # button #2 & #3
+        ACTION_QUIT,       # button #1 & #2 & #3
     )
 
     async def button_handler() -> None:
         global tetromino, buttons
 
+        button_pressed = 0
+
         while True:
 
             # check hardware buttons
-            if (event := buttons.events.get()) and event.pressed:
-                do_action(BUTTON_MAP[event.key_number])
+            if (event := buttons.events.get()):
+                if event.pressed:
+                    button_pressed += 1 << event.key_number
+                elif event.released and button_pressed:
+                    do_action(BUTTON_MAP[button_pressed])  # None will be ignored
+                    button_pressed = 0  # reset
 
             await asyncio.sleep(1/30)
 
