@@ -6,7 +6,6 @@ import asyncio
 import board
 from displayio import Group, TileGrid, OnDiskBitmap, Palette
 import json
-from keypad import Keys
 from micropython import const
 import os
 from random import randint
@@ -391,6 +390,18 @@ def play_sfx(note:synthio.Note) -> None:
             if type(lfo) is synthio.LFO:
                 lfo.retrigger()
         synth.release_all_then_press(note)
+
+
+# configure hardware
+if "BUTTON1" in dir(board) and "BUTTON2" in dir(board) and "BUTTON3" in dir(board):
+    from keypad import Keys
+    buttons = Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
+else:
+    buttons = None
+
+if NEOPIXELS and "NEOPIXEL" in dir(board):
+    from neopixel import NeoPixel
+    neopixels = NeoPixel(board.NEOPIXEL, 5)
 
 # load tiles
 def copy_palette(palette:Palette) -> Palette:
@@ -1185,29 +1196,33 @@ async def gamepad_handler() -> None:
         except (USBError, ValueError) as e:
             await asyncio.sleep(.4)
 
-button_map = (
-    ACTION_SOFT_DROP,  # button #1
-    ACTION_ROTATE,     # button #2
-    ACTION_QUIT,       # button #3
-)
+if buttons is not None:
+    
+    BUTTON_MAP = (
+        ACTION_SOFT_DROP,  # button #1
+        ACTION_ROTATE,     # button #2
+        ACTION_QUIT,       # button #3
+    )
 
-async def button_handler() -> None:
-    global tetromino, buttons
+    async def button_handler() -> None:
+        global tetromino, buttons
 
-    while True:
+        while True:
 
-        # check hardware buttons
-        if (event := buttons.events.get()) and event.pressed:
-            do_action(button_map[event.key_number])
+            # check hardware buttons
+            if (event := buttons.events.get()) and event.pressed:
+                do_action(BUTTON_MAP[event.key_number])
 
-        await asyncio.sleep(1/30)
+            await asyncio.sleep(1/30)
 
 async def main():
-    await asyncio.gather(
+    tasks = [
         asyncio.create_task(tetromino_handler()),
         asyncio.create_task(gamepad_handler()),
-        asyncio.create_task(button_handler()),
-    )
+    ]
+    if buttons is not None:
+        tasks.append(asyncio.create_task(button_handler()))
+    await asyncio.gather(*tasks)
 
 # initial display refresh
 display.refresh()
