@@ -13,6 +13,7 @@ from random import randint
 import supervisor
 import terminalio
 import time
+import vectorio
 
 from adafruit_display_text.label import Label
 from adafruit_fruitjam.peripherals import request_display_config
@@ -109,11 +110,53 @@ TETROMINOS = [
     }
 ]
 
+# initialize groups to hold visual elements
+root_group = Group()
+display.root_group = root_group
+
+loading_group = Group()
+root_group.append(loading_group)
+
+main_group = Group(scale=SCALE)
+main_group.hidden = True
+root_group.append(main_group)
+
+text_group = Group()
+text_group.hidden = True
+root_group.append(text_group)
+
+# loading text
+loading_text = Label(terminalio.FONT, text="Loading Fruitris...", color=0xffffff)
+loading_text.anchor_point = (.5, .5)
+loading_text.anchored_position = (display.width//2, display.height//2)
+loading_group.append(loading_text)
+
+# loading bar
+loading_bar_palette = Palette(1)
+loading_bar_palette[0] = 0xffffff
+loading_bar = vectorio.Rectangle(
+    pixel_shader=loading_bar_palette,
+    width=1, height=24, x=0, y=display.height-24,
+)
+loading_group.append(loading_bar)
+
+LOADING_STEPS = 31
+loading_step = 0
+def increment_loading_bar(steps:int=1) -> None:
+    global loading_step
+    loading_step += steps
+    loading_bar.width = int(display.width * (loading_step / LOADING_STEPS))
+    display.refresh()
+
+increment_loading_bar()  # display loading screen
+
 # read config
 launcher_config = {}
 if pathlib.Path("launcher.conf.json").exists():
     with open("launcher.conf.json", "r") as f:
         launcher_config = json.load(f)
+
+increment_loading_bar()
 
 # Check if DAC is connected
 i2c = board.I2C()
@@ -164,6 +207,8 @@ if tlv320_present:
     )
     mixer.voice[2].play(synth)
 
+    increment_loading_bar()
+
     # load midi tracks
     def read_midi_track(path:str, waveform=None, envelope:synthio.Envelope=None, ppqn:int=240, tempo:int=168) -> synthio.MidiTrack:
         global dac
@@ -193,6 +238,8 @@ if tlv320_present:
         ),
     )
 
+    increment_loading_bar()
+
     song_melody = read_midi_track(
         "samples/melody.mid",
         waveform = relic_waveform.mix(
@@ -207,6 +254,8 @@ if tlv320_present:
         ),
     )
 
+    increment_loading_bar()
+
     # sfx notes
     SFX_DROP = synthio.Note(
         frequency=synthio.midi_to_hz(78),
@@ -214,6 +263,8 @@ if tlv320_present:
         envelope=synthio.Envelope(attack_time=0, decay_time=.1, sustain_level=0),
         amplitude=.2,
     )
+
+    increment_loading_bar()
 
     SFX_HARD_DROP = synthio.Note(
         frequency=synthio.midi_to_hz(50),
@@ -226,6 +277,8 @@ if tlv320_present:
         ),
     )
 
+    increment_loading_bar()
+
     SFX_MOVE = synthio.Note(
         frequency=synthio.midi_to_hz(65),
         waveform=relic_waveform.noise(),
@@ -237,6 +290,8 @@ if tlv320_present:
         ),
         filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, 5000),
     )
+
+    increment_loading_bar()
 
     SFX_ROTATE = synthio.Note(
         frequency=synthio.midi_to_hz(55),
@@ -256,6 +311,8 @@ if tlv320_present:
         ),
     )
 
+    increment_loading_bar()
+
     SFX_ERROR = synthio.Note(
         frequency=synthio.midi_to_hz(31),
         waveform=relic_waveform.mix(
@@ -266,6 +323,8 @@ if tlv320_present:
         amplitude=.3,
         filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, 8000),
     )
+
+    increment_loading_bar()
 
     SFX_PLACE = synthio.Note(
         frequency=synthio.midi_to_hz(43),
@@ -288,6 +347,8 @@ if tlv320_present:
         ),
     )
 
+    increment_loading_bar()
+
     def bend_melody(*notes:int) -> array:
         return array('h', [x * 32767 // 24 for x in notes])
 
@@ -309,6 +370,8 @@ if tlv320_present:
         filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, synthio.LFO(scale=400, offset=1600, rate=5), Q=1.2),
     )
 
+    increment_loading_bar()
+
     SFX_TETRIS = synthio.Note(
         frequency=synthio.midi_to_hz(62),
         waveform=relic_waveform.mix(
@@ -326,6 +389,8 @@ if tlv320_present:
         ),
         filter=synthio.Biquad(synthio.FilterMode.LOW_PASS, synthio.LFO(scale=400, offset=1600, rate=5), Q=1.2),
     )
+
+    increment_loading_bar()
 
     SFX_GAME_OVER = synthio.Note(
         frequency=synthio.midi_to_hz(50),
@@ -352,6 +417,8 @@ if tlv320_present:
         ),
     )
 
+    increment_loading_bar()
+
 else:
     SFX_DROP = None
     SFX_HARD_DROP = None
@@ -362,6 +429,8 @@ else:
     SFX_CLEAR = None
     SFX_TETRIS = None
     SFX_GAME_OVER = None
+
+    increment_loading_bar(12)
 
 def play_song() -> None:
     if tlv320_present:
@@ -391,7 +460,6 @@ def play_sfx(note:synthio.Note) -> None:
             if type(lfo) is synthio.LFO:
                 lfo.retrigger()
         synth.release_all_then_press(note)
-
 
 # configure hardware
 if "BUTTON1" in dir(board) and "BUTTON2" in dir(board) and "BUTTON3" in dir(board):
@@ -429,13 +497,19 @@ bg_tiles, bg_palette = adafruit_imageload.load("bitmaps/bg.bmp")
 bg_palette[0] = 0x030060
 bg_palette[1] = 0x442a92
 
+increment_loading_bar()
+
 # load window border tiles
 window_tiles, window_palette = adafruit_imageload.load("bitmaps/window.bmp")
 window_palette.make_transparent(2)
 
+increment_loading_bar()
+
 # load tetromino tiles
 tiles, tiles_palette = adafruit_imageload.load("bitmaps/tetromino.bmp")
 tiles_palette.make_transparent(28)
+
+increment_loading_bar()
 
 # create separate palette to only show tile borders
 tiles_border_palette = copy_palette(tiles_palette)
@@ -444,9 +518,13 @@ for i in range(len(tiles_border_palette)):
     if i not in tiles_border_indexes:
         tiles_border_palette.make_transparent(i)
 
+increment_loading_bar()
+
 # load face tiles
 face_bmp, face_palette = adafruit_imageload.load("bitmaps/face.bmp")
 face_palette.make_transparent(2)
+
+increment_loading_bar()
 
 # load drink bitmap
 drink_bmp = OnDiskBitmap("bitmaps/drink{:s}.bmp".format("-sm" if display.width / display.height > 1.5 else ""))
@@ -455,11 +533,15 @@ drink_map = tuple([(x, drink_bmp.pixel_shader[x]) for x in drink_map])  # copy c
 for i, color in drink_map:
     drink_bmp.pixel_shader[i] = 0x000000
 
+increment_loading_bar()
+
 # starting neopixels
 if NEOPIXELS:
     for i in range(neopixels.n):
         neopixels[i] = drink_map[neopixels.n - 1 - i][1]
     neopixels.show()
+
+increment_loading_bar()
 
 class TileGroup(Group):
 
@@ -625,6 +707,8 @@ class ScoreWindow(NumberWindow):
         except OSError:
             pass
 
+increment_loading_bar()
+
 def get_random_tetromino_index() -> int:
     return randint(0, len(TETROMINOS) - 1)
 
@@ -782,11 +866,7 @@ class Tetromino(TileGroup):
     def down(self) -> bool:
         return self.move(y=1)
 
-# initialize groups to hold visual elements
-text_group = Group()
-main_group = Group(scale=SCALE)
-text_group.append(main_group)
-display.root_group = text_group
+increment_loading_bar()
 
 # use terminalio font as tile sheet to write to background
 bg_grid = TileGrid(
@@ -802,6 +882,8 @@ for y in range(SCREEN_HEIGHT):
 
 # add background to display
 main_group.append(bg_grid)
+
+increment_loading_bar()
 
 # setup grid container
 grid_window = Window(
@@ -821,6 +903,8 @@ tilegrid = TileGrid(
 grid_container.append(tilegrid)
 grid_window.append(grid_container)
 
+increment_loading_bar()
+
 # display title image
 title_bmp = OnDiskBitmap("bitmaps/title.bmp")
 title_bmp.pixel_shader.make_transparent(8)
@@ -831,6 +915,8 @@ title_tg = TileGrid(
 )
 main_group.append(title_tg)
 
+increment_loading_bar()
+
 # waiting text
 waiting_text = Label(terminalio.FONT, text="Press any key\n to start...", color=0xffffff)
 waiting_text.anchor_point = (.5, .5)
@@ -839,6 +925,8 @@ waiting_text.anchored_position = (
     (grid_window.y + grid_window.height // 2) * SCALE
 )
 text_group.append(waiting_text)
+
+increment_loading_bar()
 
 # next tetromino container
 tetromino_window = Window(
@@ -855,6 +943,8 @@ next_tetromino.tile_y = 1
 next_tetromino.rotate_left(True)
 tetromino_window.append(next_tetromino)
 
+increment_loading_bar()
+
 # high score container
 score_window = ScoreWindow(
     high_score=10000,
@@ -862,6 +952,8 @@ score_window = ScoreWindow(
     y=grid_window.tile_y + tetromino_window.tile_height + WINDOW_GAP,
 )
 main_group.append(score_window)
+
+increment_loading_bar()
 
 # face
 face_window = Window(
@@ -880,6 +972,8 @@ face_tg = TileGrid(
 face_tg.x = (face_window.width - face_tg.tile_width) // 2
 face_tg.y = (face_window.height - face_tg.tile_height) // 2
 face_window.append(face_tg)
+
+increment_loading_bar()
 
 # level drink
 level_window_y = tetromino_window.tile_y + (title_bmp.height // TILE_SIZE) + WINDOW_GAP
@@ -917,6 +1011,8 @@ def set_drink_level(value:float) -> None:
         for i in range(neopixels.n):
             neopixels[i] = apply_brightness(current_color, (value * neopixels.n) - (neopixels.n - 1 - i))
         neopixels.show()
+
+increment_loading_bar()
 
 tetromino, tetromino_indicator = None, None
 def update_tetromino_indicator_y() -> None:
@@ -1236,6 +1332,16 @@ async def main():
     if buttons is not None:
         tasks.append(asyncio.create_task(button_handler()))
     await asyncio.gather(*tasks)
+
+# remove loading screen
+loading_group.remove(loading_text)
+loading_group.remove(loading_bar)
+root_group.remove(loading_group)
+del loading_text, loading_bar, loading_group
+
+# display game components
+main_group.hidden = False
+text_group.hidden = False
 
 # initial display refresh
 display.refresh()
