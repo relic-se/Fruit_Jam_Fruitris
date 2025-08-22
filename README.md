@@ -12,7 +12,8 @@ Tetris, _**Fruit Jamified!**_
 | Rotate Clockwise | Up Arrow or X | Up or A | Button #2           |
 | Drop: Soft       | Down Arrow    | Down    | Button #2 & #3      |
 | Drop: Hard       | Z             | B       | Button #1 & #3      |
-| Quit (reload)    | Enter         | Start   | Button #1 & #2 & #3 |
+| Pause            | Enter         | Start   | Button #1 & #2      |
+| Quit (reload)    | Escape        | Select  | Button #1 & #2 & #3 |
 
 ## Credits
 
