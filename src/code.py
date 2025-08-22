@@ -136,8 +136,9 @@ loading_bar_palette = Palette(1)
 loading_bar_palette[0] = 0xffffff
 loading_bar = vectorio.Rectangle(
     pixel_shader=loading_bar_palette,
-    width=1, height=24, x=0, y=display.height-24,
+    width=1, height=24//(3-SCALE),
 )
+loading_bar.y = display.height - loading_bar.height
 loading_group.append(loading_bar)
 
 LOADING_STEPS = 31
