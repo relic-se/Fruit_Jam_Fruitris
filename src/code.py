@@ -186,7 +186,7 @@ if tlv320_present:
     else:
         # use headphones
         dac.headphone_output = True
-        dac.headphone_volume = launcher_config["tlv320"].get("volume", -15) if "tlv320" in launcher_config else -15  # dB
+        dac.dac_volume = launcher_config["tlv320"].get("volume", 0) if "tlv320" in launcher_config else 0  # dB
 
     # setup audio output
     audio = I2SOut(board.I2S_BCLK, board.I2S_WS, board.I2S_DIN)
