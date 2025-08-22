@@ -152,8 +152,8 @@ increment_loading_bar()  # display loading screen
 
 # read config
 launcher_config = {}
-if pathlib.Path("launcher.conf.json").exists():
-    with open("launcher.conf.json", "r") as f:
+if pathlib.Path("/launcher.conf.json").exists():
+    with open("/launcher.conf.json", "r") as f:
         launcher_config = json.load(f)
 
 increment_loading_bar()
