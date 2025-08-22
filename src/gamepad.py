@@ -432,10 +432,11 @@ class InputDevice:
                         yield None
                         continue
                     v = 0
-                    v |= SELECT if d[0] & 0x20 else 0
                     for key in d[2:8]:
                         if key == Keycode.ENTER:
                             v |= START
+                        elif key == Keycode.ESCAPE:
+                            v |= SELECT
                         elif key == Keycode.LEFT_ARROW:
                             v |= LEFT
                         elif key == Keycode.RIGHT_ARROW:

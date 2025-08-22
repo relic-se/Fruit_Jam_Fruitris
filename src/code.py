@@ -136,11 +136,12 @@ loading_bar_palette = Palette(1)
 loading_bar_palette[0] = 0xffffff
 loading_bar = vectorio.Rectangle(
     pixel_shader=loading_bar_palette,
-    width=1, height=24, x=0, y=display.height-24,
+    width=1, height=24//(3-SCALE),
 )
+loading_bar.y = display.height - loading_bar.height
 loading_group.append(loading_bar)
 
-LOADING_STEPS = 31
+LOADING_STEPS = 33
 loading_step = 0
 def increment_loading_bar(steps:int=1) -> None:
     global loading_step
@@ -432,9 +433,10 @@ else:
 
     increment_loading_bar(12)
 
-def play_song() -> None:
+def play_song(reset:bool=True) -> None:
     if tlv320_present:
-        set_song_tempo()  # reset tempo
+        if reset:
+            set_song_tempo()  # reset tempo
         mixer.play(song_bass, voice=0, loop=True)
         mixer.play(song_melody, voice=1, loop=True)
 
@@ -496,6 +498,13 @@ def apply_brightness(value:int, brightness:float) -> int:
 bg_tiles, bg_palette = adafruit_imageload.load("bitmaps/bg.bmp")
 bg_palette[0] = 0x030060
 bg_palette[1] = 0x442a92
+
+increment_loading_bar()
+
+# load pause tiles
+pause_tiles, pause_palette = adafruit_imageload.load("bitmaps/pause.bmp")
+pause_palette.make_transparent(1)
+PAUSE_TILE_SIZE = min(pause_tiles.width, pause_tiles.height)
 
 increment_loading_bar()
 
@@ -1014,6 +1023,31 @@ def set_drink_level(value:float) -> None:
 
 increment_loading_bar()
 
+# setup pause screen
+pause_group = Group()
+pause_group.hidden = True
+root_group.append(pause_group)
+
+pause_tg = TileGrid(
+    pause_tiles, pixel_shader=pause_palette,
+    width=display.width//PAUSE_TILE_SIZE, height=display.height//PAUSE_TILE_SIZE,
+    tile_width=PAUSE_TILE_SIZE, tile_height=PAUSE_TILE_SIZE,
+    default_tile=0,
+)
+pause_group.append(pause_tg)
+
+# clear out area for text
+for y in range(pause_tg.height//2-2, pause_tg.height//2+2):
+    for x in range(pause_tg.width//2-4, pause_tg.width//2+4):
+        pause_tg[x, y] = 1
+
+pause_label = Label(terminalio.FONT, text="PAUSED", color=0xffffff)
+pause_label.anchor_point = (.5, .5)
+pause_label.anchored_position = (display.width//2, display.height//2)
+pause_group.append(pause_label)
+
+increment_loading_bar()
+
 tetromino, tetromino_indicator = None, None
 def update_tetromino_indicator_y() -> None:
     tetromino_indicator.tile_y = 0
@@ -1045,9 +1079,10 @@ def get_next_tetromino() -> None:
 
     next_tetromino.tetromino_index = get_random_tetromino_index()
 
-STATE_WAITING = const(1)
-STATE_PLAYING = const(2)
-STATE_GAME_OVER = const(3)
+STATE_WAITING   = const(1)
+STATE_PLAYING   = const(2)
+STATE_PAUSED    = const(3)
+STATE_GAME_OVER = const(4)
 
 game_state = STATE_WAITING
 def reset_game() -> None:
@@ -1211,16 +1246,18 @@ ACTION_LEFT      = const(1)
 ACTION_RIGHT     = const(2)
 ACTION_SOFT_DROP = const(3)
 ACTION_HARD_DROP = const(4)
-ACTION_QUIT      = const(5)
+ACTION_PAUSE     = const(5)
+ACTION_QUIT      = const(6)
 
 gamepad_map = (
-    (gamepad.A,     ACTION_ROTATE),
-    (gamepad.B,     ACTION_HARD_DROP),
-    (gamepad.DOWN,  ACTION_SOFT_DROP),
-    (gamepad.START, ACTION_QUIT),
-    (gamepad.LEFT,  ACTION_LEFT),
-    (gamepad.RIGHT, ACTION_RIGHT),
-    (gamepad.UP,    ACTION_ROTATE),
+    (gamepad.A,      ACTION_ROTATE),
+    (gamepad.B,      ACTION_HARD_DROP),
+    (gamepad.DOWN,   ACTION_SOFT_DROP),
+    (gamepad.START,  ACTION_PAUSE),
+    (gamepad.SELECT, ACTION_QUIT),
+    (gamepad.LEFT,   ACTION_LEFT),
+    (gamepad.RIGHT,  ACTION_RIGHT),
+    (gamepad.UP,     ACTION_ROTATE),
 )
 gamepad_device = None
 
@@ -1262,9 +1299,17 @@ def do_action(action:int) -> None:
                 if spaces:
                     play_sfx(SFX_HARD_DROP)
                     last_drop_time = time.monotonic()
+            elif action == ACTION_PAUSE:
+                game_state = STATE_PAUSED
+                pause_group.hidden = False
+                stop_song()
+        elif game_state == STATE_PAUSED and action == ACTION_PAUSE:
+            game_state = STATE_PLAYING
+            pause_group.hidden = True
+            play_song(False)
         elif game_state == STATE_WAITING and action != ACTION_QUIT:
             reset_game()
-        if action == ACTION_QUIT:
+        elif action == ACTION_QUIT:
             if gamepad_device is not None and not gamepad_device.device.is_kernel_driver_active(gamepad_device.interface):
                 gamepad_device.device.attach_kernel_driver(gamepad_device.interface)
             supervisor.reload()
@@ -1300,7 +1345,7 @@ if buttons is not None:
         None,
         ACTION_LEFT,       # button #1
         ACTION_ROTATE,     # button #2
-        None,              # button #1 & #2
+        ACTION_PAUSE,      # button #1 & #2
         ACTION_RIGHT,      # button #3
         ACTION_HARD_DROP,  # button #1 & #3
         ACTION_SOFT_DROP,  # button #2 & #3
