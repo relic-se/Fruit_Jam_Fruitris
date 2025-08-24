@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: GPLv3
 from array import array
+import sys
 import asyncio
 import board
 from displayio import Group, TileGrid, OnDiskBitmap, Palette
@@ -1369,10 +1370,60 @@ if buttons is not None:
 
             await asyncio.sleep(1/30)
 
+key_map = (
+    ACTION_ROTATE,     # Up Arrow
+    ACTION_SOFT_DROP,  # Down Arrow
+    ACTION_RIGHT,      # Right Arrow
+    ACTION_LEFT,       # Left Arrow
+    ACTION_ROTATE,     # X
+    ACTION_HARD_DROP,  # Z
+    ACTION_PAUSE,      # P
+    ACTION_QUIT,       # R / Enter
+)
+
+async def keyboard_handler() -> None:
+
+    key_pressed = None
+
+    while supervisor.runtime.serial_bytes_available:
+        sys.stdin.read(1)  # flush input buffer
+
+    while True:
+
+        if supervisor.runtime.serial_bytes_available:
+            key_pressed = sys.stdin.read(1)
+            if ord(key_pressed) == 27: # Arrow keys start with escape
+                if supervisor.runtime.serial_bytes_available:
+                    key_pressed = sys.stdin.read(1)
+                    if key_pressed == "[":
+                        key_pressed = sys.stdin.read(1)
+                        if key_pressed not in ("A", "B", "C", "D"):
+                            key_pressed = None
+                    else:
+                        key_pressed = None
+                else:
+                    # Escape by itself
+                    key_pressed = "R" # Enter key
+            elif ord(key_pressed) not in (120, 88, 122, 90, 10):
+                key_pressed = None
+            else: # (X or Z), convert to uppercase for consistency
+                if ord(key_pressed) == 10:
+                    key_pressed = "P" # Enter key
+                else:
+                    key_pressed = key_pressed.upper()
+
+            if key_pressed is not None:
+                do_action(key_map["ABCDXZPR".index(key_pressed)])
+
+
+        await asyncio.sleep(1/30)
+
+
 async def main():
     tasks = [
         asyncio.create_task(tetromino_handler()),
         asyncio.create_task(gamepad_handler()),
+        asyncio.create_task(keyboard_handler()),
     ]
     if buttons is not None:
         tasks.append(asyncio.create_task(button_handler()))
