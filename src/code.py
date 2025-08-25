@@ -19,9 +19,7 @@ from adafruit_display_text.label import Label
 from adafruit_fruitjam.peripherals import request_display_config
 import adafruit_imageload
 import adafruit_pathlib as pathlib
-
-import gamepad
-from usb.core import USBError
+import relic_usb_host_gamepad
 
 try:
     request_display_config()  # attempt to use default display size
@@ -1249,20 +1247,23 @@ ACTION_HARD_DROP = const(4)
 ACTION_PAUSE     = const(5)
 ACTION_QUIT      = const(6)
 
-gamepad_map = (
-    (gamepad.A,      ACTION_ROTATE),
-    (gamepad.B,      ACTION_HARD_DROP),
-    (gamepad.DOWN,   ACTION_SOFT_DROP),
-    (gamepad.START,  ACTION_PAUSE),
-    (gamepad.SELECT, ACTION_QUIT),
-    (gamepad.LEFT,   ACTION_LEFT),
-    (gamepad.RIGHT,  ACTION_RIGHT),
-    (gamepad.UP,     ACTION_ROTATE),
+GAMEPAD_MAP = (
+    (relic_usb_host_gamepad.Button.A,              ACTION_ROTATE),
+    (relic_usb_host_gamepad.Button.B,              ACTION_HARD_DROP),
+    (relic_usb_host_gamepad.Button.DOWN,           ACTION_SOFT_DROP),
+    (relic_usb_host_gamepad.Button.JOYSTICK_DOWN,           ACTION_SOFT_DROP),
+    (relic_usb_host_gamepad.Button.START,          ACTION_PAUSE),
+    (relic_usb_host_gamepad.Button.SELECT,         ACTION_QUIT),
+    (relic_usb_host_gamepad.Button.LEFT,           ACTION_LEFT),
+    (relic_usb_host_gamepad.Button.JOYSTICK_LEFT,  ACTION_LEFT),
+    (relic_usb_host_gamepad.Button.RIGHT,          ACTION_RIGHT),
+    (relic_usb_host_gamepad.Button.JOYSTICK_RIGHT, ACTION_RIGHT),
+    (relic_usb_host_gamepad.Button.UP,             ACTION_ROTATE),
+    (relic_usb_host_gamepad.Button.JOYSTICK_UP,    ACTION_ROTATE),
 )
-gamepad_device = None
 
 def do_action(action:int) -> None:
-    global tetromino, last_drop_time, game_state, gamepad_device
+    global tetromino, last_drop_time, game_state
     if action is not None:
         if game_state == STATE_PLAYING:
             if action == ACTION_ROTATE:
@@ -1310,34 +1311,19 @@ def do_action(action:int) -> None:
         elif game_state == STATE_WAITING and action != ACTION_QUIT:
             reset_game()
         elif action == ACTION_QUIT:
-            if gamepad_device is not None and not gamepad_device.device.is_kernel_driver_active(gamepad_device.interface):
-                gamepad_device.device.attach_kernel_driver(gamepad_device.interface)
             supervisor.reload()
         
         display.refresh()
 
 async def gamepad_handler() -> None:
-    global gamepad_device, gamepad_map
+    gamepad = relic_usb_host_gamepad.Gamepad()
     while True:
-        try:
-            scan_result = gamepad.find_usb_device()
-            if scan_result is None:
-                await asyncio.sleep(.4)
-                continue
-            gamepad_device = gamepad.InputDevice(scan_result)
-
-            prev = 0
-            for data in gamepad_device.input_event_generator():
-                if data is not None and isinstance(data, int):
-                    diff = prev ^ data
-                    prev = data
-                    for button, action in gamepad_map:
-                        if diff & button and data & button:
-                            do_action(action)
-                await asyncio.sleep(1/30)
-
-        except (USBError, ValueError) as e:
-            await asyncio.sleep(.4)
+        for event in gamepad.events:
+            if event.pressed:
+                for button, action in GAMEPAD_MAP:
+                    if event.key_number == button:
+                        do_action(action)
+        await asyncio.sleep(1/30)
 
 if buttons is not None:
     

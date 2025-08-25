@@ -6,4 +6,5 @@ adafruit_pathlib
 adafruit_tlv320
 asyncio
 neopixel
+relic_usb_host_gamepad
 relic_waveform
