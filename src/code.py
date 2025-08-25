@@ -1377,8 +1377,8 @@ key_map = (
     ACTION_LEFT,       # Left Arrow
     ACTION_ROTATE,     # X
     ACTION_HARD_DROP,  # Z
-    ACTION_PAUSE,      # P
-    ACTION_QUIT,       # R / Enter
+    ACTION_PAUSE,      # P / Enter
+    ACTION_QUIT,       # Q / ESC
 )
 
 async def keyboard_handler() -> None:
@@ -1403,17 +1403,18 @@ async def keyboard_handler() -> None:
                         key_pressed = None
                 else:
                     # Escape by itself
-                    key_pressed = "R" # Enter key
-            elif ord(key_pressed) not in (120, 88, 122, 90, 10):
+                    key_pressed = "Q"
+            #                               x,  X,   z,  Z,   q,  Q,   p,  P, enter
+            elif ord(key_pressed) not in (120, 88, 122, 90, 113, 81, 112, 80, 10):
                 key_pressed = None
-            else: # (X or Z), convert to uppercase for consistency
+            else: # convert to uppercase for consistency
                 if ord(key_pressed) == 10:
                     key_pressed = "P" # Enter key
                 else:
                     key_pressed = key_pressed.upper()
 
             if key_pressed is not None:
-                do_action(key_map["ABCDXZPR".index(key_pressed)])
+                do_action(key_map["ABCDXZPQ".index(key_pressed)])
 
 
         await asyncio.sleep(1/30)
