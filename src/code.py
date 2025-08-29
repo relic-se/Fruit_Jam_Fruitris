@@ -2,6 +2,14 @@
 # SPDX-FileCopyrightText: 2025 RetiredWizard
 #
 # SPDX-License-Identifier: GPLv3
+import adafruit_pathlib as pathlib
+
+# load included modules if we aren't installed on the root path
+if len(__file__.split("/")[:-1]) > 1:
+    if (modules_directory := pathlib.Path("/".join(__file__.split("/")[:-1])) / "lib").exists():
+        import sys
+        sys.path.append(str(modules_directory.absolute()))
+
 from array import array
 import sys
 import asyncio
@@ -19,7 +27,6 @@ import vectorio
 from adafruit_display_text.label import Label
 from adafruit_fruitjam.peripherals import request_display_config
 import adafruit_imageload
-import adafruit_pathlib as pathlib
 
 import gamepad
 from usb.core import USBError
