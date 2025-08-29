@@ -43,7 +43,7 @@ GAME_SPEED_START = const(1)
 GAME_SPEED_MOD   = 0.98  # modifies the game speed when line is cleared
 WINDOW_WIDTH     = (SCREEN_WIDTH - GRID_WIDTH - 2) // 2 - WINDOW_GAP * 2
 FONT_HEIGHT      = terminalio.FONT.get_bounding_box()[1]
-NEOPIXELS        = False
+NEOPIXELS        = True
 
 TETROMINOS = [
     {
