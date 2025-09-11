@@ -1330,6 +1330,7 @@ def do_action(action:int) -> None:
         elif action == ACTION_QUIT:
             if gamepad_device is not None and not gamepad_device.device.is_kernel_driver_active(gamepad_device.interface):
                 gamepad_device.device.attach_kernel_driver(gamepad_device.interface)
+            neopixels.deinit()
             supervisor.reload()
         
         display.refresh()
@@ -1460,4 +1461,9 @@ text_group.hidden = False
 # initial display refresh
 display.refresh()
 
-asyncio.run(main())
+try:
+    asyncio.run(main())
+except KeyboardInterrupt:
+    neopixels.deinit()
+    supervisor.reload()
+    
