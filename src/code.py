@@ -183,24 +183,21 @@ if peripherals.dac:
 
     import relic_waveform
 
-    dac = peripherals.dac
-
     # setup audio output
-    audio = peripherals.audio
     mixer = Mixer(
         voice_count=3,
-        sample_rate=dac.sample_rate,
+        sample_rate=peripherals.dac.sample_rate,
         channel_count=1,
-        bits_per_sample=dac.bit_depth,
+        bits_per_sample=peripherals.dac.bit_depth,
         buffer_size=8192,
     )
     mixer.voice[0].level = 0.3  # bass level
     mixer.voice[1].level = 0.1  # melody level
     mixer.voice[2].level = 0.2  # sfx level
-    audio.play(mixer)
+    peripherals.audio.play(mixer)
 
     synth = synthio.Synthesizer(
-        sample_rate=dac.sample_rate,
+        sample_rate=peripherals.dac.sample_rate,
         channel_count=mixer.channel_count,
     )
     mixer.voice[2].play(synth)
@@ -209,7 +206,6 @@ if peripherals.dac:
 
     # load midi tracks
     def read_midi_track(path:str, waveform=None, envelope:synthio.Envelope=None, ppqn:int=240, tempo:int=168) -> synthio.MidiTrack:
-        global dac
         with open(path, "rb") as f:
             # Ignore SMF header
             if f.read(4) == b'MThd':
@@ -219,7 +215,7 @@ if peripherals.dac:
 
             return synthio.MidiTrack(
                 f.read(), tempo=ppqn*tempo//60,
-                sample_rate=dac.sample_rate,
+                sample_rate=peripherals.dac.sample_rate,
                 waveform=waveform, envelope=envelope,
             )
 
