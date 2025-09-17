@@ -88,8 +88,6 @@ def find_usb_device():
                 return ScanResult(dev, TYPE_POWERA_WIRED, 'PowerAWired', desc)
             elif dev_int0_info == (0xff, 0xff, 0xff, 0xff, 0x5d, 0x01):
                 return ScanResult(dev, TYPE_XINPUT, 'XInput', desc)
-            elif dev_int0_info == (0x00, 0x00, 0x00, 0x03, 0x01, 0x01):
-                return ScanResult(dev, TYPE_BOOT_KEYBOARD, 'BootKeyboard', desc)
             else:
                 return None
         except (ValueError, USBError) as e:
@@ -160,8 +158,6 @@ class InputDevice:
             print('Initializing PowerA Wired Controller')
         elif dev_type == TYPE_XINPUT:
             self.init_xinput()
-        elif dev_type == TYPE_BOOT_KEYBOARD:
-            print('Initializing Boot-Compatible Keyboard')
         else:
             raise ValueError('Unknown dev_type: %d' % dev_type)
 
@@ -418,47 +414,6 @@ class InputDevice:
                     yield None if d is None else ((d[1] << 8) | d[0])
             # Filter lambda trims off all the analog stuff
             return normalize_xinput(int0_gen(filter_fn=lambda d: d[2:4]))
-        elif dev_type == TYPE_BOOT_KEYBOARD:
-            # Report format:
-            # byte 0: modifer keys
-            #         0x01=LCtrl, 0x02=LShift, 0x04=LAlt, 0x08=LGUI,
-            #         0x10=RCtrl, 0x20=RShift, 0x40=RAlt, 0x80=RGUI
-            # byte 1: reserved
-            # byte 2-7: keypress #1-6
-            #
-            def normalize_keyboard(data):
-                for d in data:
-                    if d is None:
-                        yield None
-                        continue
-                    v = 0
-                    for key in d[2:8]:
-                        if key == Keycode.ENTER:
-                            v |= START
-                        elif key == Keycode.ESCAPE:
-                            v |= SELECT
-                        elif key == Keycode.LEFT_ARROW:
-                            v |= LEFT
-                        elif key == Keycode.RIGHT_ARROW:
-                            v |= RIGHT
-                        elif key == Keycode.UP_ARROW:
-                            v |= UP
-                        elif key == Keycode.DOWN_ARROW:
-                            v |= DOWN
-                        elif key == Keycode.X:
-                            v |= A
-                        elif key == Keycode.Z:
-                            v |= B
-                        elif key == Keycode.D:
-                            v |= X
-                        elif key == Keycode.S:
-                            v |= Y
-                        elif key == Keycode.R:
-                            v |= R
-                        elif key == Keycode.W:
-                            v |= L
-                    yield v
-            return normalize_keyboard(int0_gen())
 
     def int0_read_generator(self, filter_fn=lambda d: d):
         # Generator function: read from interface 0 and yield raw report data
