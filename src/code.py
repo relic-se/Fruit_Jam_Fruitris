@@ -1084,13 +1084,13 @@ def get_next_tetromino() -> None:
 
     tetromino = Tetromino(next_tetromino.tetromino_index)
     tetromino.tile_x = (GRID_WIDTH - TETROMINO_SIZE) // 2  # center along x axis of grid
-    grid_container.append(tetromino)
 
     tetromino_indicator = Tetromino(tetromino.tetromino_index, offset=False, border_only=True)
     tetromino_indicator.tile_x = tetromino.tile_x
     update_tetromino_indicator_y()
     
     grid_container.append(tetromino_indicator)
+    grid_container.append(tetromino)
 
     next_tetromino.tetromino_index = get_random_tetromino_index()
 
