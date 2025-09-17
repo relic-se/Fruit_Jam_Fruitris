@@ -15,7 +15,6 @@ import sys
 import asyncio
 import board
 from displayio import Group, TileGrid, OnDiskBitmap, Palette
-import json
 from micropython import const
 import os
 from random import randint
@@ -25,16 +24,16 @@ import time
 import vectorio
 
 from adafruit_display_text.label import Label
-from adafruit_fruitjam.peripherals import request_display_config
+import adafruit_fruitjam.peripherals
 import adafruit_imageload
 
 import gamepad
 from usb.core import USBError
 
 try:
-    request_display_config()  # attempt to use default display size
+    adafruit_fruitjam.peripherals.request_display_config()  # attempt to use default display size
 except (ValueError, TypeError):
-    request_display_config(640, 480)
+    adafruit_fruitjam.peripherals.request_display_config(640, 480)
 display = supervisor.runtime.display
 display.auto_refresh = False
 
@@ -159,55 +158,36 @@ def increment_loading_bar(steps:int=1) -> None:
 
 increment_loading_bar()  # display loading screen
 
-# read config
-launcher_config = {}
-for directory in ("/", "/sd/", "/saves/"):
-    launcher_config_path = directory + "launcher.conf.json"
-    if pathlib.Path(launcher_config_path).exists():
-        with open(launcher_config_path, "r") as f:
-            launcher_config = launcher_config | json.load(f)
-if "audio" not in launcher_config:
-    launcher_config["audio"] = {}
+# get Fruit Jam OS config if available
+try:
+    import launcher_config
+    config = launcher_config.LauncherConfig()
+except ImportError:
+    config = None
 
 increment_loading_bar()
 
-# Check if DAC is connected
-i2c = board.I2C()
-while not i2c.try_lock():
-    time.sleep(0.01)
-tlv320_present = 0x18 in i2c.scan()
-i2c.unlock()
+# setup audio, buttons, and neopixels
+print()
+peripherals = adafruit_fruitjam.peripherals.Peripherals(
+    audio_output=(config.audio_output if config is not None else "headphones"),
+    safe_volume_limit=(config.audio_volume_override_danger if config is not None else 12),
+    sample_rate=32000,
+    bit_depth=16
+)
+peripherals.volume = config.audio_volume if config is not None else 12
 
-if tlv320_present:
+if peripherals.dac:
     from audiobusio import I2SOut
     from audiomixer import Mixer
     import synthio
 
-    import adafruit_tlv320
     import relic_waveform
 
-    dac = adafruit_tlv320.TLV320DAC3100(i2c)
-
-    # set sample rate & bit depth
-    dac.configure_clocks(sample_rate=32000, bit_depth=16)
-
-    if launcher_config["audio"].get("output") == "speaker":
-        # use speaker
-        dac.speaker_output = True
-        dac.headphone_output = False
-        _volume = launcher_config["audio"].get("volume_override_danger", 
-            launcher_config["audio"].get("volume", 12))
-        dac.dac_volume = (_volume/20 * 86) - 63
-    else:
-        # use headphones
-        dac.headphone_output = True
-        dac.speaker_output = False
-        _volume = launcher_config["audio"].get("volume_override_danger", 
-            launcher_config["audio"].get("volume", 7))
-        dac.dac_volume = (_volume/20 * 86) - 63
+    dac = peripherals.dac
 
     # setup audio output
-    audio = I2SOut(board.I2S_BCLK, board.I2S_WS, board.I2S_DIN)
+    audio = peripherals.audio
     mixer = Mixer(
         voice_count=3,
         sample_rate=dac.sample_rate,
@@ -452,30 +432,30 @@ else:
     increment_loading_bar(12)
 
 def play_song(reset:bool=True) -> None:
-    if tlv320_present:
+    if peripherals.dac:
         if reset:
             set_song_tempo()  # reset tempo
         mixer.play(song_bass, voice=0, loop=True)
         mixer.play(song_melody, voice=1, loop=True)
 
 def stop_song() -> None:
-    if tlv320_present:
+    if peripherals.dac:
         mixer.stop_voice(0)
         mixer.stop_voice(1)
 
 def get_song_tempo(ppqn:int=240) -> int:
-    if tlv320_present and hasattr(song_bass, "tempo"):
+    if peripherals.dac and hasattr(song_bass, "tempo"):
         return song_bass.tempo*60//ppqn
     else:
         return 168
 
 def set_song_tempo(tempo:int=168, ppqn:int=240) -> None:
-    if tlv320_present and hasattr(song_bass, "tempo"):
+    if peripherals.dac and hasattr(song_bass, "tempo"):
         for track in (song_bass, song_melody):
             track.tempo = ppqn*tempo//60
 
 def play_sfx(note:synthio.Note) -> None:
-    if tlv320_present:
+    if peripherals.dac:
         for lfo in (note.bend, note.amplitude, (note.filter.frequency if type(note.filter) is synthio.Biquad else None)):
             if type(lfo) is synthio.LFO:
                 lfo.retrigger()
@@ -483,15 +463,20 @@ def play_sfx(note:synthio.Note) -> None:
 
 # configure hardware
 if "BUTTON1" in dir(board) and "BUTTON2" in dir(board) and "BUTTON3" in dir(board):
+    # I know this is a hack but until Fruitris is refactored to use peripherals.buttonx...
+    for button in peripherals._buttons:
+        button.deinit()
+    peripherals._buttons = None
     from keypad import Keys
     buttons = Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
 else:
     buttons = None
 
 if NEOPIXELS and "NEOPIXEL" in dir(board):
-    from neopixel import NeoPixel
-    neopixels = NeoPixel(board.NEOPIXEL, 5)
-
+    neopixels = peripherals.neopixels
+elif NEOPIXELS and "NEOPIXELS" not in dir(board):
+    NEOPIXELS = False
+   
 # load tiles
 def copy_palette(palette:Palette) -> Palette:
     clone = Palette(len(palette))
@@ -1330,7 +1315,7 @@ def do_action(action:int) -> None:
         elif action == ACTION_QUIT:
             if gamepad_device is not None and not gamepad_device.device.is_kernel_driver_active(gamepad_device.interface):
                 gamepad_device.device.attach_kernel_driver(gamepad_device.interface)
-            neopixels.deinit()
+            peripherals.deinit()
             supervisor.reload()
         
         display.refresh()
@@ -1464,6 +1449,6 @@ display.refresh()
 try:
     asyncio.run(main())
 except KeyboardInterrupt:
-    neopixels.deinit()
-    supervisor.reload()
+    peripherals.deinit()
+    raise KeyboardInterrupt
     
