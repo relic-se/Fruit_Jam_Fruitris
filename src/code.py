@@ -531,6 +531,13 @@ increment_loading_bar()
 # create separate palette to only show tile borders
 tiles_border_palette = copy_palette(tiles_palette)
 tiles_border_indexes = (1, 11, 16, 9, 6, 2, 0, 26)
+tiles_border_color_indexes = (13, 25, 31, 24, 21, 15, 12, 32)
+
+# copy primary color to border indexes
+for pos, index in enumerate(tiles_border_indexes):
+    tiles_border_palette[index] = tiles_border_palette[tiles_border_color_indexes[pos]]
+
+# make non-border colors transparent
 for i in range(len(tiles_border_palette)):
     if i not in tiles_border_indexes:
         tiles_border_palette.make_transparent(i)
