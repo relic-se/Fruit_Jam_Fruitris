@@ -521,6 +521,13 @@ increment_loading_bar()
 # create separate palette to only show tile borders
 tiles_border_palette = copy_palette(tiles_palette)
 tiles_border_indexes = (1, 11, 16, 9, 6, 2, 0, 26)
+tiles_border_color_indexes = (8, 18, 23, 17, 19, 15, 7, 30)
+
+# copy primary color to border indexes
+for pos, index in enumerate(tiles_border_indexes):
+    tiles_border_palette[index] = tiles_border_palette[tiles_border_color_indexes[pos]]
+
+# make non-border colors transparent
 for i in range(len(tiles_border_palette)):
     if i not in tiles_border_indexes:
         tiles_border_palette.make_transparent(i)
@@ -1067,13 +1074,13 @@ def get_next_tetromino() -> None:
 
     tetromino = Tetromino(next_tetromino.tetromino_index)
     tetromino.tile_x = (GRID_WIDTH - TETROMINO_SIZE) // 2  # center along x axis of grid
-    grid_container.append(tetromino)
 
     tetromino_indicator = Tetromino(tetromino.tetromino_index, offset=False, border_only=True)
     tetromino_indicator.tile_x = tetromino.tile_x
     update_tetromino_indicator_y()
     
     grid_container.append(tetromino_indicator)
+    grid_container.append(tetromino)
 
     next_tetromino.tetromino_index = get_random_tetromino_index()
 
