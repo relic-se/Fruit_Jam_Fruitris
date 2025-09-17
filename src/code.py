@@ -531,7 +531,7 @@ increment_loading_bar()
 # create separate palette to only show tile borders
 tiles_border_palette = copy_palette(tiles_palette)
 tiles_border_indexes = (1, 11, 16, 9, 6, 2, 0, 26)
-tiles_border_color_indexes = (13, 25, 31, 24, 21, 15, 12, 32)
+tiles_border_color_indexes = (8, 18, 23, 17, 19, 15, 7, 30)
 
 # copy primary color to border indexes
 for pos, index in enumerate(tiles_border_indexes):
