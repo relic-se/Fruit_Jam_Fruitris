@@ -1,2 +1,10 @@
-circup
-requests
+adafruit_display_text
+adafruit_fruitjam
+adafruit_hid
+adafruit_imageload
+adafruit_pathlib
+adafruit_tlv320
+asyncio
+neopixel
+relic_waveform
+relic_usb_host_gamepad

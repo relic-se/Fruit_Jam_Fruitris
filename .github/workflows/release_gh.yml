@@ -10,7 +10,6 @@ on:
 
 jobs:
   upload-release-assets:
-    if: github.repository_owner == 'relic-se'
     runs-on: ubuntu-latest
     steps:
     - name: Set up requested Python version
@@ -29,11 +28,11 @@ jobs:
     - name: Install reqs
       shell: bash
       run: |
-        pip install -r requirements.txt
+        pip install -r build/requirements.txt
     - name: Build assets
       shell: bash
       run: |
-        python build.py
+        python build/build.py
     - name: Upload Release Assets
       uses: shogo82148/actions-upload-release-asset@v1
       with:
