@@ -1294,7 +1294,7 @@ def do_action(action:int) -> None:
             play_song(False)
         elif game_state == STATE_WAITING and action != ACTION_QUIT:
             reset_game()
-        elif action == ACTION_QUIT:
+        if action == ACTION_QUIT:
             gamepad.disconnect()
             peripherals.deinit()
             supervisor.reload()
