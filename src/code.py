@@ -49,7 +49,6 @@ GAME_SPEED_START = const(1)
 GAME_SPEED_MOD   = 0.98  # modifies the game speed when line is cleared
 WINDOW_WIDTH     = (SCREEN_WIDTH - GRID_WIDTH - 2) // 2 - WINDOW_GAP * 2
 FONT_HEIGHT      = terminalio.FONT.get_bounding_box()[1]
-NEOPIXELS        = True
 
 TETROMINOS = [
     {
@@ -466,11 +465,6 @@ if "BUTTON1" in dir(board) and "BUTTON2" in dir(board) and "BUTTON3" in dir(boar
     buttons = Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
 else:
     buttons = None
-
-if NEOPIXELS and "NEOPIXEL" in dir(board):
-    neopixels = peripherals.neopixels
-elif NEOPIXELS and "NEOPIXELS" not in dir(board):
-    NEOPIXELS = False
    
 # load tiles
 def copy_palette(palette:Palette) -> Palette:
@@ -550,10 +544,10 @@ for i, color in drink_map:
 increment_loading_bar()
 
 # starting neopixels
-if NEOPIXELS:
-    for i in range(neopixels.n):
-        neopixels[i] = drink_map[neopixels.n - 1 - i][1]
-    neopixels.show()
+if peripherals.neopixels:
+    for i in range(peripherals.neopixels.n):
+        peripherals.neopixels[i] = drink_map[peripherals.neopixels.n - 1 - i][1]
+    peripherals.neopixels.show()
 
 increment_loading_bar()
 
@@ -1021,10 +1015,10 @@ def set_drink_level(value:float) -> None:
         drink_tg.pixel_shader[color[0]] = current_color if drink_value >= i else 0x000000
     
     # set neopixel level
-    if NEOPIXELS:
-        for i in range(neopixels.n):
-            neopixels[i] = apply_brightness(current_color, (value * neopixels.n) - (neopixels.n - 1 - i))
-        neopixels.show()
+    if peripherals.neopixels:
+        for i in range(peripherals.neopixels.n):
+            peripherals.neopixels[i] = apply_brightness(current_color, (value * peripherals.neopixels.n) - (peripherals.neopixels.n - 1 - i))
+        peripherals.neopixels.show()
 
 increment_loading_bar()
 
