@@ -168,7 +168,7 @@ increment_loading_bar()
 
 # setup audio, buttons, and neopixels
 peripherals = adafruit_fruitjam.peripherals.Peripherals(
-    audio_output=(config.audio_output if config is not None else "headphones"),
+    audio_output=(config.audio_output if config is not None else "headphone"),
     safe_volume_limit=(config.audio_volume_override_danger if config is not None else 12),
     sample_rate=32000,
     bit_depth=16
