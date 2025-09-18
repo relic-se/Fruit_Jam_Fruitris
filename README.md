@@ -14,7 +14,6 @@ Tetris, _**Fruit Jamified!**_
 | Drop: Hard       | Z             | B       | Button #1 & #3      |
 | Pause            | Enter         | Start   | Button #1 & #2      |
 | Quit (reload)    | Escape        | Select  | Button #1 & #2 & #3 |
-* Quit only works when paused
 
 ## Credits
 
