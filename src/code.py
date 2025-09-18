@@ -168,7 +168,7 @@ increment_loading_bar()
 
 # setup audio, buttons, and neopixels
 peripherals = adafruit_fruitjam.peripherals.Peripherals(
-    audio_output=(config.audio_output if config is not None else "headphones"),
+    audio_output=(config.audio_output if config is not None else "headphone"),
     safe_volume_limit=(config.audio_volume_override_danger if config is not None else 12),
     sample_rate=32000,
     bit_depth=16
@@ -454,17 +454,6 @@ def play_sfx(note:synthio.Note) -> None:
             if type(lfo) is synthio.LFO:
                 lfo.retrigger()
         synth.release_all_then_press(note)
-
-# configure hardware
-if "BUTTON1" in dir(board) and "BUTTON2" in dir(board) and "BUTTON3" in dir(board):
-    # I know this is a hack but until Fruitris is refactored to use peripherals.buttonx...
-    for button in peripherals._buttons:
-        button.deinit()
-    peripherals._buttons = None
-    from keypad import Keys
-    buttons = Keys((board.BUTTON1, board.BUTTON2, board.BUTTON3), value_when_pressed=False, pull=True)
-else:
-    buttons = None
    
 # load tiles
 def copy_palette(palette:Palette) -> Palette:
@@ -1339,35 +1328,37 @@ async def gamepad_handler() -> None:
         except (USBError, ValueError) as e:
             await asyncio.sleep(.4)
 
-if buttons is not None:
-    
-    BUTTON_MAP = (
-        None,
-        ACTION_LEFT,       # button #1
-        ACTION_ROTATE,     # button #2
-        ACTION_PAUSE,      # button #1 & #2
-        ACTION_RIGHT,      # button #3
-        ACTION_HARD_DROP,  # button #1 & #3
-        ACTION_SOFT_DROP,  # button #2 & #3
-        ACTION_QUIT,       # button #1 & #2 & #3
-    )
+BUTTON_MAP = (
+    None,
+    ACTION_LEFT,       # button #1
+    ACTION_ROTATE,     # button #2
+    ACTION_PAUSE,      # button #1 & #2
+    ACTION_RIGHT,      # button #3
+    ACTION_HARD_DROP,  # button #1 & #3
+    ACTION_SOFT_DROP,  # button #2 & #3
+    ACTION_QUIT,       # button #1 & #2 & #3
+)
 
-    async def button_handler() -> None:
-        global tetromino, buttons
+async def button_handler() -> None:
+    global tetromino, buttons
 
-        button_pressed = 0
+    previous_buttons_pressed = 0
+    while True:
+        # obtain bit mask of pressed buttons
+        buttons_pressed = 0
+        for i, value in enumerate((peripherals.button1, peripherals.button2, peripherals.button3)):
+            buttons_pressed |= value << i
 
-        while True:
+        # only process if the button state has changed
+        if buttons_pressed != previous_buttons_pressed:
+            # generate bit mask of the buttons which were changed
+            buttons_changed = buttons_pressed ^ previous_buttons_pressed
+            if buttons_changed & buttons_pressed == 0:  # the buttons that changed were released
+                do_action(BUTTON_MAP[previous_buttons_pressed])
+                buttons_changed = 0  # reset
+            previous_buttons_pressed = buttons_pressed
 
-            # check hardware buttons
-            if (event := buttons.events.get()):
-                if event.pressed:
-                    button_pressed += 1 << event.key_number
-                elif event.released and button_pressed:
-                    do_action(BUTTON_MAP[button_pressed])  # None will be ignored
-                    button_pressed = 0  # reset
-
-            await asyncio.sleep(1/30)
+        await asyncio.sleep(1/30)
 
 key_map = (
     ACTION_ROTATE,     # Up Arrow
@@ -1420,14 +1411,12 @@ async def keyboard_handler() -> None:
 
 
 async def main():
-    tasks = [
+    await asyncio.gather(
         asyncio.create_task(tetromino_handler()),
         asyncio.create_task(gamepad_handler()),
         asyncio.create_task(keyboard_handler()),
-    ]
-    if buttons is not None:
-        tasks.append(asyncio.create_task(button_handler()))
-    await asyncio.gather(*tasks)
+        asyncio.create_task(button_handler())
+    )
 
 # remove loading screen
 loading_group.remove(loading_text)
