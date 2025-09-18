@@ -1311,7 +1311,7 @@ async def gamepad_handler() -> None:
                         if event.key_number in buttons:
                             do_action(action)
                             break
-        await asyncio.sleep(1/30)
+        await asyncio.sleep(1/30 if gamepad.connected else 1)
 
 BUTTON_MAP = (
     None,
