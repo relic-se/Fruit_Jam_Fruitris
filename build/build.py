@@ -20,6 +20,12 @@ ASSET_DIRS = (
     "samples",
 )
 
+SRC_FILES = (
+    "code.py",
+    "icon.bmp",
+    "metadata.json"
+)
+
 def run(cmd):
     result = subprocess.run(cmd, shell=True, check=True, capture_output=True)
     return result.stdout.decode('utf-8').strip()
@@ -52,15 +58,15 @@ def main():
     except subprocess.CalledProcessError:
         git_commit = "NO_COMMIT"
 
+    # get the project root directory
+    build_dir = Path(__file__).parent
+    root_dir = build_dir.parent
+
     # read metadata
-    with open("metadata.json", "r") as f:
+    with open(build_dir / "metadata.json", "r") as f:
         metadata = json.load(f)
 
-    # get the project root directory
-    root_dir = Path(__file__).parent
-
     # set up paths
-    src_dir = root_dir / "src"
     output_dir = root_dir / "dist"
     asset_dirs = tuple([root_dir / x for x in ASSET_DIRS])
 
@@ -84,10 +90,10 @@ def main():
     temp_root_dir.mkdir(parents=True)
 
     # copy and format bundle readme
-    shutil.copyfile("README_bundle.txt", temp_root_dir / "README.txt")
+    shutil.copyfile(build_dir / "README.txt", temp_root_dir / "README.txt")
     replace_tags(temp_root_dir / "README.txt", {
         "name": git_name,
-        "guide_url": metadata["guide_url"],
+        "guide_url": metadata.get("guide_url", ""),
         "git_remote": git_remote,
         "git_commit": git_commit,
     })
@@ -107,11 +113,12 @@ def main():
             for asset_dir in asset_dirs:
                 shutil.copytree(asset_dir, bundle_dir / asset_dir.name, dirs_exist_ok=True)
 
-            # copy src contents
-            shutil.copytree(src_dir, bundle_dir, dirs_exist_ok=True)
+            # copy src files
+            for src_file in SRC_FILES:
+                shutil.copyfile(root_dir / src_file, bundle_dir / src_file, follow_symlinks=False)
 
             # install required libs
-            shutil.copyfile("mock_boot_out.txt", bundle_dir / "boot_out.txt")
+            shutil.copyfile(build_dir / "boot_out.txt", bundle_dir / "boot_out.txt")
             replace_tags(bundle_dir / "boot_out.txt", {
                 "version": bundle_version.replace('.x', '.0.0'),
                 "date": datetime.today().strftime('%Y-%m-%d'),

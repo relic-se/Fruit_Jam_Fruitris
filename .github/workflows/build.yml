@@ -26,8 +26,8 @@ jobs:
     - name: Install reqs
       shell: bash
       run: |
-        pip install -r requirements.txt
-    - name: Build Fruitris
+        pip install -r build/requirements.txt
+    - name: Build application
       shell: bash
       run: |
-        python build.py
+        python build/build.py
