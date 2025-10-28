@@ -1201,7 +1201,7 @@ async def tetromino_handler() -> None:
                         
                         # clear top line
                         for x in range(GRID_WIDTH):
-                            tilegrid[x, 0] = 0
+                            tilegrid[x, 1] = 0
 
                 # update score
                 add_lines(lines)
