@@ -1195,7 +1195,7 @@ async def tetromino_handler() -> None:
                     if cleared:
                         lines += 1
                         # move tiles down (clears current line)
-                        for i in range(y, 1, -1):
+                        for i in range(y, 0, -1):
                             for x in range(GRID_WIDTH):
                                 tilegrid[x, i] = tilegrid[x, i - 1]
                         
